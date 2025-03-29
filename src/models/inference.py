@@ -4,7 +4,15 @@ from argparse import Namespace, ArgumentParser
 import logging
 from logging import StreamHandler
 import torch
-from transformers import PreTrainedModel, PreTrainedTokenizer, AutoModelForCausalLM, AutoTokenizer
+import torch.nn.functional as F
+from torch import Tensor
+from transformers import (
+    PreTrainedModel,
+    PreTrainedTokenizer,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+)
+from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 import typing
 import sys
 
@@ -23,6 +31,56 @@ def load_model_and_tokenizer(
     except Exception as e:
         logging.error("Failed to load model or tokenizer: %s", str(e))
         raise ValueError(f"Error loading model or tokenizer: {str(e)}") from e
+
+
+def run_inference(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizer,
+    prompt: str,
+    max_length: int,
+    top_k: int,
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+) -> str | None:
+    try:
+        input_ids: Tensor = tokenizer(prompt,
+                                      return_tensors="pt").input_ids.to(device)
+
+        with torch.no_grad():
+            for _ in range(max_length - input_ids.shape[-1]):
+                outputs: CausalLMOutputWithCrossAttentions = model(input_ids)
+                logits: Tensor = outputs.logits[:, -1, :]
+                probabilites: Tensor = F.softmax(logits, dim=-1)
+
+                top_k_probs: Tensor
+                top_k_ids: Tensor
+                top_k_probs, top_k_ids = torch.topk(probabilites, top_k)
+
+                top_k_tokens: list[str] = tokenizer.convert_ids_to_tokens(
+                    top_k_ids[0].tolist())
+
+                logging.debug(
+                    "Iteration %d",
+                    len(input_ids[0]) - len(tokenizer(prompt).input_ids))
+                for i in range(top_k):
+                    logging.debug("Token: %s, Logit: %d, Probability: %r",
+                                  top_k_tokens[i], logits[0,
+                                                          top_k_ids[0,
+                                                                    i]].item(),
+                                  top_k_probs[0, i].item())
+
+                input_ids: Tensor = torch.cat(
+                    [input_ids, top_k_ids[0][0].reshape(1, -1)], dim=-1)
+
+                logging.debug(
+                    "Generated text so far: %s",
+                    tokenizer.decode(input_ids[0], skip_special_tokens=True))
+
+            return tokenizer.decode(input_ids[0], skip_special_tokens=True)
+    except KeyboardInterrupt:
+        logging.info("Inference interrupted by user")
+    except Exception as e:
+        logging.error("Error during inference: %s", str(e))
+        raise
 
 
 def _parse_arguments() -> Namespace:
@@ -58,13 +116,6 @@ def _parse_arguments() -> Namespace:
         help="Number of top tokens to analyze (default: 50)",
     )
 
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=1.0,
-        help="Sampling temperature (default: 1.0)",
-    )
-
     parser.add_argument("--verbose",
                         action="store_true",
                         help="Enable verbose logging")
@@ -76,11 +127,28 @@ def _setup_logging(verbose: bool = False) -> None:
     log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[StreamHandler(sys.stdout)],
     )
 
 
-if __name__ == "__main__":
+def _main() -> None:
     args: Namespace = _parse_arguments()
     _setup_logging(args.verbose)
+
+    model: PreTrainedModel
+    tokenizer: PreTrainedTokenizer
+    model, tokenizer = load_model_and_tokenizer(args.model)
+
+    generated_text: str | None = run_inference(
+        model=model,
+        tokenizer=tokenizer,
+        prompt=args.prompt,
+        max_length=args.max_length,
+        top_k=args.top_k,
+    )
+    logging.info("Generated text: %s", generated_text)
+
+
+if __name__ == "__main__":
+    _main()

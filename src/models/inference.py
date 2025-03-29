@@ -77,6 +77,48 @@ def run_inference(
                 input_ids: Tensor = torch.cat(
                     [input_ids, top_k_ids[0][0].reshape(1, -1)], dim=-1)
 
+                top_logit_value = logits[0, 0].item()
+                second_logit_value = logits[
+                    0, 1].item() if top_k > 1 else float("-inf")
+                top_prob_value = top_k_probs[0, 0].item()
+                second_prob_value = top_k_probs[0,
+                                                1].item() if top_k > 1 else 0.0
+                epsilon = 1e-10
+
+                highest_logit_abs = abs(top_logit_value)
+                logging.debug("Highest logit (abs): %r", highest_logit_abs)
+
+                highest_prob = top_prob_value
+                logging.debug("Highest probability: %r", highest_prob)
+
+                logit_diff = top_logit_value - second_logit_value
+                logging.debug("Logit difference (1st-2nd): %r", logit_diff)
+
+                if second_logit_value != 0:
+                    logit_ratio = top_logit_value / second_logit_value
+                else:
+                    logit_ratio = float("inf")
+                logging.debug("Logit ratio (1st/2nd): %r", logit_ratio)
+
+                prob_diff = top_prob_value - second_prob_value
+                logging.debug("Probability difference (1st-2nd): %r",
+                              prob_diff)
+
+                if second_prob_value != 0:
+                    prob_ratio = top_prob_value / second_prob_value
+                else:
+                    prob_ratio = float("inf")
+                logging.debug("Probability ratio (1st/2nd): %r", prob_ratio)
+
+                prob_entropy = -torch.sum(
+                    probabilites * torch.log(probabilites + epsilon)).item()
+                logging.debug("Probability distribution entropy: %r",
+                              prob_entropy)
+
+                logging.debug(
+                    "Chosen token: %s",
+                    top_k_tokens[0]
+                )
                 logging.debug(
                     "Generated text so far: %s",
                     tokenizer.decode(input_ids[0], skip_special_tokens=True))

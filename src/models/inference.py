@@ -23,8 +23,14 @@ def load_model_and_tokenizer(
     try:
         tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
             model_name)
+
         model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             model_name)
+
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            model.config.pad_token_id = model.config.eos_token_id
+
         model.eval()
 
         return model, tokenizer

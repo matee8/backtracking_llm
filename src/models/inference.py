@@ -18,7 +18,8 @@ import sys
 
 
 def load_model_and_tokenizer(
-    model_name: str = "gpt2", ) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
+        model_name: str = "gpt2"
+) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     try:
         tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
             model_name)
@@ -66,55 +67,6 @@ def predict_next_token(
     except Exception as e:
         logging.error("Error during next token prediction: %s", str(e))
         raise
-
-
-def _calculate_statistics(
-    logits: Tensor,
-    probabilities: Tensor,
-) -> dict[str, float]:
-    if probabilities.numel() == 0 or logits.numel() == 0:
-        raise ValueError("Cannot calculate statistics on empty tensors")
-
-    top_logit_value = logits[0].item()
-
-    if logits.numel() > 1:
-        second_logit_value = logits[1].item()
-    else:
-        second_logit_value = float("inf")
-
-    top_prob_value = probabilities[0].item()
-
-    if probabilities.numel() > 1:
-        second_prob_value = probabilities[1].item()
-    else:
-        second_prob_value = 0.0
-
-    stats = {}
-
-    epsilon = 1e-10
-
-    stats["highest_logit"] = top_logit_value
-
-    stats["highest_prob"] = top_prob_value
-
-    stats["logit_diff"] = top_logit_value - second_logit_value
-
-    if second_logit_value != 0:
-        stats["logit_ratio"] = top_logit_value / second_logit_value
-    else:
-        stats["logit_ratio"] = float("inf")
-
-    stats["prob_diff"] = top_prob_value - second_prob_value
-
-    if second_prob_value != 0:
-        stats["prob_ratio"] = top_prob_value / second_prob_value
-    else:
-        stats["prob_ratio"] = float("inf")
-
-    stats["prob_entropy"] = -torch.sum(
-        probabilities * torch.log(probabilities + epsilon)).item()
-
-    return stats
 
 
 def run_inference_loop(
@@ -177,6 +129,55 @@ def run_inference_loop(
     except Exception as e:
         logging.error("Error during inference: %s", str(e))
         raise
+
+
+def _calculate_statistics(
+    logits: Tensor,
+    probabilities: Tensor,
+) -> dict[str, float]:
+    if probabilities.numel() == 0 or logits.numel() == 0:
+        raise ValueError("Cannot calculate statistics on empty tensors")
+
+    top_logit_value = logits[0].item()
+
+    if logits.numel() > 1:
+        second_logit_value = logits[1].item()
+    else:
+        second_logit_value = float("inf")
+
+    top_prob_value = probabilities[0].item()
+
+    if probabilities.numel() > 1:
+        second_prob_value = probabilities[1].item()
+    else:
+        second_prob_value = 0.0
+
+    stats = {}
+
+    epsilon = 1e-10
+
+    stats["highest_logit"] = top_logit_value
+
+    stats["highest_prob"] = top_prob_value
+
+    stats["logit_diff"] = top_logit_value - second_logit_value
+
+    if second_logit_value != 0:
+        stats["logit_ratio"] = top_logit_value / second_logit_value
+    else:
+        stats["logit_ratio"] = float("inf")
+
+    stats["prob_diff"] = top_prob_value - second_prob_value
+
+    if second_prob_value != 0:
+        stats["prob_ratio"] = top_prob_value / second_prob_value
+    else:
+        stats["prob_ratio"] = float("inf")
+
+    stats["prob_entropy"] = -torch.sum(
+        probabilities * torch.log(probabilities + epsilon)).item()
+
+    return stats
 
 
 def _parse_arguments() -> Namespace:

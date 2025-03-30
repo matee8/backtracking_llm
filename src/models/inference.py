@@ -13,7 +13,6 @@ from transformers import (
     AutoTokenizer,
 )
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
-from typing import Any
 import sys
 
 
@@ -41,8 +40,7 @@ def predict_next_token(
     model: PreTrainedModel,
     input_ids: Tensor,
     top_k: int,
-    temperature: float = 1.,
-) -> list[dict[str, Any]]:
+) -> tuple[Tensor, Tensor]:
     try:
         model.eval()
 
@@ -50,21 +48,7 @@ def predict_next_token(
             outputs: CausalLMOutputWithCrossAttentions = model(input_ids)
             logits: Tensor = outputs.logits[:, -1, :]
 
-            top_k_logits: Tensor
-            top_k_ids: Tensor
-            top_k_logits, top_k_ids = torch.topk(logits, top_k)
-            if temperature != .0:
-                top_k_logits /= temperature
-
-            res = []
-
-            for i in range(top_k):
-                res.append({
-                    "token_id": top_k_ids[0, i],
-                    "logit": top_k_logits[0, i].item(),
-                })
-
-            return res
+            return torch.topk(logits, top_k)
     except Exception as e:
         logging.error("Error during next token prediction: %s", str(e))
         raise
@@ -85,19 +69,18 @@ def run_inference_loop(
                                       return_tensors="pt").input_ids.to(device)
 
         for _ in range(max_length - input_ids.shape[-1]):
-            tokens: list[dict[str, Any]] = predict_next_token(
-                model, input_ids, top_k, temperature)
-
-            logits: Tensor = torch.empty(len(tokens))
-            for i in range(top_k):
-                logits[i] = torch.tensor([tokens[i]["logit"]])
-
-            probabilities: Tensor = F.softmax(logits, dim=-1)
+            tokens: Tensor
+            logits: Tensor
+            logits, tokens = predict_next_token(model, input_ids, top_k)
+            logits = logits.reshape(-1, 1)
+            tokens = tokens.reshape(-1, 1)
 
             if temperature != 0.:
+                probabilities: Tensor = F.softmax(logits / temperature, dim=-1)
                 chosen_token_idx: Tensor = torch.multinomial(probabilities,
                                                              num_samples=1)
             else:
+                probabilities: Tensor = F.softmax(logits, dim=-1)
                 chosen_token_idx: Tensor = torch.argmax(probabilities)
 
             if logger.isEnabledFor(logging.DEBUG):
@@ -108,7 +91,7 @@ def run_inference_loop(
                 for i in range(top_k):
                     logging.debug(
                         "Token: %s, logit: %r, probability: %r",
-                        tokenizer.decode(tokens[i]["token_id"]),
+                        tokenizer.decode(tokens[i].item()),
                         logits[i].item(),
                         probabilities[i].item(),
                     )
@@ -121,12 +104,10 @@ def run_inference_loop(
 
                 logging.debug(
                     "Chosen token: %s",
-                    tokenizer.decode(tokens[chosen_token_idx]["token_id"]))
+                    tokenizer.decode(tokens[chosen_token_idx].item()))
 
-            input_ids: Tensor = torch.cat([
-                input_ids, tokens[chosen_token_idx]["token_id"].reshape(1, -1)
-            ],
-                                          dim=-1)
+            input_ids: Tensor = torch.cat(
+                [input_ids, tokens[chosen_token_idx].reshape(1, -1)], dim=-1)
 
         logging.debug("Generated text: %s",
                       tokenizer.decode(input_ids[0], skip_special_tokens=True))

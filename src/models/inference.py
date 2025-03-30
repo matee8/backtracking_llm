@@ -48,19 +48,16 @@ def predict_next_token(
         with torch.no_grad():
             outputs: CausalLMOutputWithCrossAttentions = model(input_ids)
             logits: Tensor = outputs.logits[:, -1, :]
-            probabilites: Tensor = F.softmax(logits, dim=-1)
 
-            top_k_probs: Tensor
             top_k_ids: Tensor
-            top_k_probs, top_k_ids = torch.topk(probabilites, top_k)
+            top_k_logits, top_k_ids = torch.topk(logits, top_k)
 
             res = []
 
             for i in range(top_k):
                 res.append({
-                    "token_id": top_k_ids[0][i],
-                    "logit": logits[0, top_k_ids[0, i]].item(),
-                    "probability": top_k_probs[0, i].item(),
+                    "token_id": top_k_ids[0, i],
+                    "logit": top_k_logits[0, i].item(),
                 })
 
             return res
@@ -92,21 +89,18 @@ def run_inference_loop(
                     len(input_ids[0]) - len(tokenizer(prompt).input_ids))
 
                 logits = torch.empty(len(tokens))
-                probabilities = torch.empty(len(tokens))
+                for i in range(top_k):
+                    logits[i] = torch.tensor([tokens[i]["logit"]])
+
+                probabilities = F.softmax(logits, dim=-1)
 
                 for i in range(top_k):
-                    logit = tokens[i]["logit"]
-                    probability = tokens[i]["probability"]
-
                     logging.debug(
                         "Token: %s, logit: %r, probability: %r",
                         tokenizer.decode(tokens[i]["token_id"]),
-                        logit,
-                        probability,
+                        logits[i].item(),
+                        probabilities[i].item(),
                     )
-
-                    logits[i] = torch.tensor([logit])
-                    probabilities[i] = torch.tensor([probability])
 
                 stats: dict[str, float] = _calculate_statistics(
                     logits, probabilities)

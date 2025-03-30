@@ -41,6 +41,7 @@ def predict_next_token(
     model: PreTrainedModel,
     input_ids: Tensor,
     top_k: int,
+    temperature: float = 1.,
 ) -> list[dict[str, Any]]:
     try:
         model.eval()
@@ -49,8 +50,11 @@ def predict_next_token(
             outputs: CausalLMOutputWithCrossAttentions = model(input_ids)
             logits: Tensor = outputs.logits[:, -1, :]
 
+            top_k_logits: Tensor
             top_k_ids: Tensor
             top_k_logits, top_k_ids = torch.topk(logits, top_k)
+            if temperature != .0:
+                top_k_logits /= temperature
 
             res = []
 
@@ -73,6 +77,7 @@ def run_inference_loop(
     max_length: int,
     top_k: int,
     logger: Logger,
+    temperature: float = 1.0,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ) -> Tensor | None:
     try:
@@ -81,18 +86,24 @@ def run_inference_loop(
 
         for _ in range(max_length - input_ids.shape[-1]):
             tokens: list[dict[str, Any]] = predict_next_token(
-                model, input_ids, top_k)
+                model, input_ids, top_k, temperature)
+
+            logits: Tensor = torch.empty(len(tokens))
+            for i in range(top_k):
+                logits[i] = torch.tensor([tokens[i]["logit"]])
+
+            probabilities: Tensor = F.softmax(logits, dim=-1)
+
+            if temperature != 0.:
+                chosen_token_idx: Tensor = torch.multinomial(probabilities,
+                                                             num_samples=1)
+            else:
+                chosen_token_idx: Tensor = torch.argmax(probabilities)
 
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "Iteration %d",
                     len(input_ids[0]) - len(tokenizer(prompt).input_ids))
-
-                logits = torch.empty(len(tokens))
-                for i in range(top_k):
-                    logits[i] = torch.tensor([tokens[i]["logit"]])
-
-                probabilities = F.softmax(logits, dim=-1)
 
                 for i in range(top_k):
                     logging.debug(
@@ -108,11 +119,14 @@ def run_inference_loop(
                 for key, value in stats.items():
                     logging.debug("%s: %r", key, value)
 
-                logging.debug("Chosen token: %s",
-                              tokenizer.decode(tokens[0]["token_id"]))
+                logging.debug(
+                    "Chosen token: %s",
+                    tokenizer.decode(tokens[chosen_token_idx]["token_id"]))
 
-            input_ids: Tensor = torch.cat(
-                [input_ids, tokens[0]["token_id"].reshape(1, -1)], dim=-1)
+            input_ids: Tensor = torch.cat([
+                input_ids, tokens[chosen_token_idx]["token_id"].reshape(1, -1)
+            ],
+                                          dim=-1)
 
         logging.debug("Generated text: %s",
                       tokenizer.decode(input_ids[0], skip_special_tokens=True))
@@ -211,6 +225,13 @@ def _parse_arguments() -> Namespace:
                         action="store_true",
                         help="Enable verbose logging")
 
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Sampling temperature (default: 1.0)",
+    )
+
     return parser.parse_args()
 
 
@@ -239,7 +260,8 @@ def _main() -> None:
                        prompt=args.prompt,
                        max_length=args.max_length,
                        top_k=args.top_k,
-                       logger=logger)
+                       logger=logger,
+                       temperature=args.temperature)
 
 
 if __name__ == "__main__":

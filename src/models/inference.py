@@ -13,13 +13,12 @@ from transformers import (
     AutoTokenizer,
 )
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
-import typing
+from typing import Any
 import sys
 
 
 def load_model_and_tokenizer(
-    model_name: str = "gpt2",
-) -> typing.Tuple[PreTrainedModel, PreTrainedTokenizer]:
+    model_name: str = "gpt2", ) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     try:
         tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
             model_name)
@@ -39,93 +38,111 @@ def load_model_and_tokenizer(
         raise ValueError(f"Error loading model or tokenizer: {str(e)}") from e
 
 
-def run_inference(
+def predict_next_token(
+    model: PreTrainedModel,
+    input_ids: Tensor,
+    top_k: int,
+) -> list[dict[str, Any]]:
+    try:
+        model.eval()
+
+        with torch.no_grad():
+            outputs: CausalLMOutputWithCrossAttentions = model(input_ids)
+            logits: Tensor = outputs.logits[:, -1, :]
+            probabilites: Tensor = F.softmax(logits, dim=-1)
+
+            top_k_probs: Tensor
+            top_k_ids: Tensor
+            top_k_probs, top_k_ids = torch.topk(probabilites, top_k)
+
+            res = []
+
+            for i in range(top_k):
+                res.append({
+                    "token_id": top_k_ids[0][i],
+                    "logit": logits[0, top_k_ids[0, i]].item(),
+                    "probability": top_k_probs[0, i].item(),
+                })
+
+            return res
+    except Exception as e:
+        logging.error("Error during next token prediction: %s", str(e))
+        raise
+
+
+def _calculate_statistics(
+    logits: Tensor,
+    probabilites: Tensor,
+) -> dict[str, float]:
+    if probabilites.numel() == 0 or logits.numel() == 0:
+        raise ValueError("Cannot calculate statistics on empty tensors")
+
+    top_logit_value = logits[0, 0].item()
+
+    if logits.numel() > 1:
+        second_logit_value = logits[0, 1].item()
+    else:
+        second_logit_value = float("inf")
+
+    top_prob_value = probabilites[0, 0].item()
+
+    if probabilites.numel() > 1:
+        second_prob_value = probabilites[0, 1].item()
+    else:
+        second_prob_value = 0.0
+
+    stats = {}
+
+    epsilon = 1e-10
+
+    stats["highest_logit"] = abs(top_logit_value)
+
+    stats["highest_prob"] = top_prob_value
+
+    stats["logit_diff"] = top_logit_value - second_logit_value
+
+    if second_logit_value != 0:
+        stats["logit_ratio"] = top_logit_value / second_logit_value
+    else:
+        stats["logit_ratio"] = float("inf")
+
+    stats["prob_diff"] = top_prob_value - second_prob_value
+
+    if second_prob_value != 0:
+        stats["prob_ratio"] = top_prob_value / second_prob_value
+    else:
+        stats["prob_ratio"] = float("inf")
+
+    stats["prob_entropy"] = -torch.sum(
+        probabilites * torch.log(probabilites + epsilon)).item()
+
+    return stats
+
+
+def run_inference_loop(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizer,
     prompt: str,
     max_length: int,
     top_k: int,
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
-) -> str | None:
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    # log: bool=False,
+) -> Tensor | None:
     try:
         input_ids: Tensor = tokenizer(prompt,
                                       return_tensors="pt").input_ids.to(device)
 
         with torch.no_grad():
             for _ in range(max_length - input_ids.shape[-1]):
-                outputs: CausalLMOutputWithCrossAttentions = model(input_ids)
-                logits: Tensor = outputs.logits[:, -1, :]
-                probabilites: Tensor = F.softmax(logits)
-
-                top_k_probs: Tensor
-                top_k_ids: Tensor
-                top_k_probs, top_k_ids = torch.topk(probabilites, top_k)
-
-                top_k_tokens: list[str] = tokenizer.convert_ids_to_tokens(
-                    top_k_ids[0].tolist())
-
-                logging.debug(
-                    "Iteration %d",
-                    len(input_ids[0]) - len(tokenizer(prompt).input_ids))
-                for i in range(top_k):
-                    logging.debug("Token: %s, Logit: %d, Probability: %r",
-                                  top_k_tokens[i], logits[0,
-                                                          top_k_ids[0,
-                                                                    i]].item(),
-                                  top_k_probs[0, i].item())
-
+                tokens: list[dict[str, Any]] = predict_next_token(
+                    model, input_ids, top_k)
                 input_ids: Tensor = torch.cat(
-                    [input_ids, top_k_ids[0][0].reshape(1, -1)], dim=-1)
+                    [input_ids, tokens[0]["token_id"].reshape(1, -1)], dim=-1)
 
-                top_logit_value = logits[0, 0].item()
-                second_logit_value = logits[
-                    0, 1].item() if top_k > 1 else float("-inf")
-                top_prob_value = top_k_probs[0, 0].item()
-                second_prob_value = top_k_probs[0,
-                                                1].item() if top_k > 1 else 0.0
-                epsilon = 1e-10
-
-                highest_logit_abs = abs(top_logit_value)
-                logging.debug("Highest logit (abs): %r", highest_logit_abs)
-
-                highest_prob = top_prob_value
-                logging.debug("Highest probability: %r", highest_prob)
-
-                logit_diff = top_logit_value - second_logit_value
-                logging.debug("Logit difference (1st-2nd): %r", logit_diff)
-
-                if second_logit_value != 0:
-                    logit_ratio = top_logit_value / second_logit_value
-                else:
-                    logit_ratio = float("inf")
-                logging.debug("Logit ratio (1st/2nd): %r", logit_ratio)
-
-                prob_diff = top_prob_value - second_prob_value
-                logging.debug("Probability difference (1st-2nd): %r",
-                              prob_diff)
-
-                if second_prob_value != 0:
-                    prob_ratio = top_prob_value / second_prob_value
-                else:
-                    prob_ratio = float("inf")
-                logging.debug("Probability ratio (1st/2nd): %r", prob_ratio)
-
-                prob_entropy = -torch.sum(
-                    probabilites * torch.log(probabilites + epsilon)).item()
-                logging.debug("Probability distribution entropy: %r",
-                              prob_entropy)
-
-                logging.debug(
-                    "Chosen token: %s",
-                    top_k_tokens[0]
-                )
-                logging.debug(
-                    "Generated text so far: %s",
-                    tokenizer.decode(input_ids[0], skip_special_tokens=True))
-
-            return tokenizer.decode(input_ids[0], skip_special_tokens=True)
+        return input_ids
     except KeyboardInterrupt:
         logging.info("Inference interrupted by user")
+        return None
     except Exception as e:
         logging.error("Error during inference: %s", str(e))
         raise
@@ -188,14 +205,15 @@ def _main() -> None:
     tokenizer: PreTrainedTokenizer
     model, tokenizer = load_model_and_tokenizer(args.model)
 
-    generated_text: str | None = run_inference(
+    generated_text: Tensor | None = run_inference_loop(
         model=model,
         tokenizer=tokenizer,
         prompt=args.prompt,
         max_length=args.max_length,
         top_k=args.top_k,
     )
-    logging.info("Generated text: %s", generated_text)
+    if generated_text is not None:
+        print(tokenizer.decode(generated_text[0], skip_special_tokens=True))
 
 
 if __name__ == "__main__":

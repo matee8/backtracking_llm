@@ -30,8 +30,6 @@ def load_model_and_tokenizer(
             tokenizer.pad_token = tokenizer.eos_token
             model.config.pad_token_id = model.config.eos_token_id
 
-        model.eval()
-
         return model, tokenizer
     except Exception as e:
         logging.error("Failed to load model or tokenizer: %s", str(e))

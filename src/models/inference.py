@@ -2,7 +2,7 @@
 
 from argparse import Namespace, ArgumentParser
 import logging
-from logging import StreamHandler
+from logging import Logger, StreamHandler
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -72,22 +72,22 @@ def predict_next_token(
 
 def _calculate_statistics(
     logits: Tensor,
-    probabilites: Tensor,
+    probabilities: Tensor,
 ) -> dict[str, float]:
-    if probabilites.numel() == 0 or logits.numel() == 0:
+    if probabilities.numel() == 0 or logits.numel() == 0:
         raise ValueError("Cannot calculate statistics on empty tensors")
 
-    top_logit_value = logits[0, 0].item()
+    top_logit_value = logits[0].item()
 
     if logits.numel() > 1:
-        second_logit_value = logits[0, 1].item()
+        second_logit_value = logits[1].item()
     else:
         second_logit_value = float("inf")
 
-    top_prob_value = probabilites[0, 0].item()
+    top_prob_value = probabilities[0].item()
 
-    if probabilites.numel() > 1:
-        second_prob_value = probabilites[0, 1].item()
+    if probabilities.numel() > 1:
+        second_prob_value = probabilities[1].item()
     else:
         second_prob_value = 0.0
 
@@ -95,7 +95,7 @@ def _calculate_statistics(
 
     epsilon = 1e-10
 
-    stats["highest_logit"] = abs(top_logit_value)
+    stats["highest_logit"] = top_logit_value
 
     stats["highest_prob"] = top_prob_value
 
@@ -114,7 +114,7 @@ def _calculate_statistics(
         stats["prob_ratio"] = float("inf")
 
     stats["prob_entropy"] = -torch.sum(
-        probabilites * torch.log(probabilites + epsilon)).item()
+        probabilities * torch.log(probabilities + epsilon)).item()
 
     return stats
 
@@ -125,20 +125,53 @@ def run_inference_loop(
     prompt: str,
     max_length: int,
     top_k: int,
+    logger: Logger,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    # log: bool=False,
 ) -> Tensor | None:
     try:
         input_ids: Tensor = tokenizer(prompt,
                                       return_tensors="pt").input_ids.to(device)
 
-        with torch.no_grad():
-            for _ in range(max_length - input_ids.shape[-1]):
-                tokens: list[dict[str, Any]] = predict_next_token(
-                    model, input_ids, top_k)
-                input_ids: Tensor = torch.cat(
-                    [input_ids, tokens[0]["token_id"].reshape(1, -1)], dim=-1)
+        for _ in range(max_length - input_ids.shape[-1]):
+            tokens: list[dict[str, Any]] = predict_next_token(
+                model, input_ids, top_k)
 
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Iteration %d",
+                    len(input_ids[0]) - len(tokenizer(prompt).input_ids))
+
+                logits = torch.empty(len(tokens))
+                probabilities = torch.empty(len(tokens))
+
+                for i in range(top_k):
+                    logit = tokens[i]["logit"]
+                    probability = tokens[i]["probability"]
+
+                    logging.debug(
+                        "Token: %s, logit: %r, probability: %r",
+                        tokenizer.decode(tokens[i]["token_id"]),
+                        logit,
+                        probability,
+                    )
+
+                    logits[i] = torch.tensor([logit])
+                    probabilities[i] = torch.tensor([probability])
+
+                stats: dict[str, float] = _calculate_statistics(
+                    logits, probabilities)
+
+                for key, value in stats.items():
+                    logging.debug("%s: %r", key, value)
+
+                logging.debug("Chosen token: %s",
+                              tokenizer.decode(tokens[0]["token_id"]))
+
+            input_ids: Tensor = torch.cat(
+                [input_ids, tokens[0]["token_id"].reshape(1, -1)], dim=-1)
+
+        logging.debug("Generated text: %s",
+                      tokenizer.decode(input_ids[0], skip_special_tokens=True))
         return input_ids
     except KeyboardInterrupt:
         logging.info("Inference interrupted by user")
@@ -188,32 +221,32 @@ def _parse_arguments() -> Namespace:
     return parser.parse_args()
 
 
-def _setup_logging(verbose: bool = False) -> None:
-    log_level = logging.DEBUG if verbose else logging.INFO
+def _setup_logging(verbose: bool = False) -> Logger:
+    log_level: int = logging.DEBUG if verbose else logging.INFO
+
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[StreamHandler(sys.stdout)],
     )
 
+    return logging.getLogger(__name__)
+
 
 def _main() -> None:
     args: Namespace = _parse_arguments()
-    _setup_logging(args.verbose)
+    logger: Logger = _setup_logging(args.verbose)
 
     model: PreTrainedModel
     tokenizer: PreTrainedTokenizer
     model, tokenizer = load_model_and_tokenizer(args.model)
 
-    generated_text: Tensor | None = run_inference_loop(
-        model=model,
-        tokenizer=tokenizer,
-        prompt=args.prompt,
-        max_length=args.max_length,
-        top_k=args.top_k,
-    )
-    if generated_text is not None:
-        print(tokenizer.decode(generated_text[0], skip_special_tokens=True))
+    run_inference_loop(model=model,
+                       tokenizer=tokenizer,
+                       prompt=args.prompt,
+                       max_length=args.max_length,
+                       top_k=args.top_k,
+                       logger=logger)
 
 
 if __name__ == "__main__":

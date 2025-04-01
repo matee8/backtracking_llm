@@ -73,17 +73,30 @@ def _main() -> None:
     args: argparse.Namespace = _parse_arguments()
     logger: logging.Logger = _setup_logging(args.verbose)
 
-    model: transformers.PreTrainedModel
-    tokenizer: transformers.PreTrainedTokenizer
-    model, tokenizer = inference.load_model_and_tokenizer(args.model)
+    try:
+        model: transformers.PreTrainedModel
+        tokenizer: transformers.PreTrainedTokenizer
+        model, tokenizer = inference.load_model_and_tokenizer(args.model)
+    except Exception as e:
+        logger.error("Failed to load model %s: %s", args.model, e,
+                     exc_info=True)
+        logger.error("Please ensure the model name is correct and you have an" \
+                     " internet connection if needed.")
+        sys.exit(1)
 
-    inference.run_inference_loop(model=model,
-                              tokenizer=tokenizer,
-                              prompt=args.prompt,
-                              max_length=args.max_length,
-                              top_k=args.top_k,
-                              logger=logger,
-                              temperature=args.temperature)
+    try:
+
+        inference.run_inference_loop(model=model,
+                                tokenizer=tokenizer,
+                                prompt=args.prompt,
+                                max_length=args.max_length,
+                                top_k=args.top_k,
+                                logger=logger,
+                                temperature=args.temperature)
+    except Exception as e:
+        logger.error("An error occurred during the inference loop: %e", 
+                     exc_info=True)
+        sys.exit(1) 
 
 
 if __name__ == "__main__":

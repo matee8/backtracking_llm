@@ -98,11 +98,13 @@ def run_inference_loop(
                          exc_info=True)
             raise
 
+        generated_ids: torch.Tensor = input_ids
+
         for _ in range(max_length - input_ids.shape[-1]):
             top_k_indices: torch.Tensor
             top_k_logits: torch.Tensor
             top_k_logits, top_k_indices = predict_next_token(
-                model, input_ids, top_k)
+                model, generated_ids, top_k)
             top_k_logits = top_k_logits.ravel()
             top_k_indices = top_k_indices.ravel()
 
@@ -124,7 +126,7 @@ def run_inference_loop(
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "Iteration %d",
-                    len(input_ids[0]) - len(tokenizer(prompt).input_ids))
+                    len(generated_ids[0]) - len(tokenizer(prompt).input_ids))
 
                 for i in range(top_k):
                     logging.debug(
@@ -147,12 +149,14 @@ def run_inference_loop(
                 logging.info("EOS token generated. Stopping inference.")
                 break
 
-            input_ids: torch.Tensor = torch.cat(
-                [input_ids, chosen_token_id.reshape(1, -1)], dim=-1)
+            generated_ids: torch.Tensor = torch.cat(
+                [generated_ids, chosen_token_id.reshape(1, -1)], dim=-1)
 
-        logging.debug("Generated text: %s",
-                      tokenizer.decode(input_ids[0], skip_special_tokens=True))
-        return input_ids
+        logging.debug(
+            "Generated text: %s",
+            tokenizer.decode(generated_ids[0], skip_special_tokens=True))
+
+        return generated_ids
     except KeyboardInterrupt:
         logging.warning("Inference interrupted by user")
         return None

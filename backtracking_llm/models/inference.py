@@ -16,12 +16,28 @@ def load_model_and_tokenizer(
         model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
 
         if tokenizer.pad_token is None:
+            logging.info(
+                "Tokenizer for '%s' has no pad token set. " \
+                "Setting to EOS token.",
+                model_name)
+
             tokenizer.pad_token = tokenizer.eos_token
             model.config.pad_token_id = model.config.eos_token_id
 
+        logging.info("Successfully loaded model and tokenizer: %s", model_name)
         return model, tokenizer
+    except (OSError, ValueError, RuntimeError) as e:
+        logging.error("Failed to load model or tokenizer '%s' due to: %s",
+                      model_name,
+                      e,
+                      exc_info=True)
+        raise
     except Exception as e:
-        logging.error("Failed to load model or tokenizer: %s", str(e))
+        logging.error(
+            "An unexpected error occured while loading model '%s': %s",
+            model_name,
+            e,
+            exc_info=True)
         raise
 
 
@@ -33,14 +49,29 @@ def predict_next_token(
     try:
         model.eval()
 
-        with torch.inference_mode():
+        if hasattr(torch, "inference_mode"):
+            context_manager = torch.inference_mode()
+        else:
+            context_manager = torch.no_grad()
+
+        with context_manager:
             outputs: modeling_outputs.CausalLMOutputWithCrossAttentions = model(
                 input_ids)
             logits: torch.Tensor = outputs.logits[:, -1, :]
 
             return torch.topk(logits, top_k)
+    except (RuntimeError, ValueError, IndexError) as e:
+        logging.error(
+            "Error during next token prediction (input shape: %s): %s",
+            input_ids.shape,
+            e,
+            exc_info=True)
+        raise
     except Exception as e:
-        logging.error("Error during next token prediction: %s", str(e))
+        logging.error(
+            "An unexpected error occured during next token prediction: " \
+            "(input shape: %s): %s",
+            input_ids.shape, e, exc_info=True)
         raise
 
 
@@ -55,8 +86,15 @@ def run_inference_loop(
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ) -> typing.Optional[torch.Tensor]:
     try:
-        input_ids: torch.Tensor = tokenizer(
-            prompt, return_tensors="pt").input_ids.to(device)
+        try:
+            input_ids: torch.Tensor = tokenizer(
+                prompt, return_tensors="pt").input_ids.to(device)
+        except Exception as e:
+            logger.error("Failed to tokenize prompt '%s': %s",
+                         prompt,
+                         e,
+                         exc_info=True)
+            raise
 
         for _ in range(max_length - input_ids.shape[-1]):
             top_k_indices: torch.Tensor
@@ -110,10 +148,16 @@ def run_inference_loop(
                       tokenizer.decode(input_ids[0], skip_special_tokens=True))
         return input_ids
     except KeyboardInterrupt:
-        logging.info("Inference interrupted by user")
+        logging.warning("Inference interrupted by user")
         return None
+    except (RuntimeError, ValueError) as e:
+        logger.error("Error during inference loop: %s", e, exc_info=True)
+        raise
     except Exception as e:
-        logging.error("Error during inference: %s", str(e))
+        logging.error(
+            "An unexpected error occured during the inference loop: %s",
+            e,
+            exc_info=True)
         raise
 
 
@@ -121,8 +165,16 @@ def _calculate_statistics(
     logits: torch.Tensor,
     probabilities: torch.Tensor,
 ) -> typing.Dict[str, float]:
-    if probabilities.numel() == 0 or logits.numel() == 0:
-        raise ValueError("Cannot calculate statistics on empty tensors")
+    if logits.numel() == 0 or probabilities.numel() == 0:
+        raise ValueError(
+            "Cannot calculate statistics on empty logit or probability tensors"
+        )
+
+    if logits.shape != probabilities.shape:
+        raise ValueError(
+            f"Logits shape {logits.shape} must match probabilites " \
+            f"shape {probabilities.shape}"
+        )
 
     top_logit_value = logits[0].item()
 

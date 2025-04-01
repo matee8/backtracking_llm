@@ -86,6 +86,8 @@ def run_inference_loop(
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ) -> typing.Optional[torch.Tensor]:
     try:
+        model.to(device)
+
         try:
             input_ids: torch.Tensor = tokenizer(
                 prompt, return_tensors="pt").input_ids.to(device)

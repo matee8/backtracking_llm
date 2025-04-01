@@ -25,6 +25,7 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--prompt",
         type=str,
+        required=True,
         help="Prompt to start generation",
     )
 

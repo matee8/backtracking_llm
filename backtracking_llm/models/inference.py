@@ -59,20 +59,27 @@ def run_inference_loop(
             prompt, return_tensors="pt").input_ids.to(device)
 
         for _ in range(max_length - input_ids.shape[-1]):
-            tokens: torch.Tensor
-            logits: torch.Tensor
-            logits, tokens = predict_next_token(model, input_ids, top_k)
-            logits = logits.ravel()
-            tokens = tokens.ravel()
+            top_k_indices: torch.Tensor
+            top_k_logits: torch.Tensor
+            top_k_logits, top_k_indices = predict_next_token(
+                model, input_ids, top_k)
+            top_k_logits = top_k_logits.ravel()
+            top_k_indices = top_k_indices.ravel()
 
-            if temperature != 0.:
-                probabilities: torch.Tensor = F.softmax(logits / temperature,
-                                                        dim=-1)
-                chosen_token_idx: torch.Tensor = torch.multinomial(
-                    probabilities, num_samples=1)
+            if temperature == 0.:
+                probabilities: torch.Tensor = F.softmax(top_k_logits, dim=-1)
+
+                chosen_token_relative_idx: torch.Tensor = torch.argmax(
+                    top_k_logits)
             else:
-                probabilities: torch.Tensor = F.softmax(logits, dim=-1)
-                chosen_token_idx: torch.Tensor = torch.argmax(probabilities)
+                probabilities: torch.Tensor = F.softmax(top_k_logits /
+                                                        temperature,
+                                                        dim=-1)
+
+                chosen_token_relative_idx: torch.Tensor = torch.multinomial(
+                    probabilities, num_samples=1)
+
+            chosen_token_id = top_k_indices[chosen_token_relative_idx]
 
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
@@ -82,23 +89,22 @@ def run_inference_loop(
                 for i in range(top_k):
                     logging.debug(
                         "Token: %s, logit: %r, probability: %r",
-                        tokenizer.decode(tokens[i].item()),
-                        logits[i].item(),
+                        tokenizer.decode(top_k_indices[i].item()),
+                        top_k_logits[i].item(),
                         probabilities[i].item(),
                     )
 
                 stats: typing.Dict[str, float] = _calculate_statistics(
-                    logits, probabilities)
+                    top_k_logits, probabilities)
 
                 for key, value in stats.items():
                     logging.debug("%s: %r", key, value)
 
-                logging.debug(
-                    "Chosen token: %s",
-                    tokenizer.decode(tokens[chosen_token_idx].item()))
+                logging.debug("Chosen token: %s",
+                              tokenizer.decode(chosen_token_id.item()))
 
             input_ids: torch.Tensor = torch.cat(
-                [input_ids, tokens[chosen_token_idx].reshape(1, -1)], dim=-1)
+                [input_ids, chosen_token_id.reshape(1, -1)], dim=-1)
 
         logging.debug("Generated text: %s",
                       tokenizer.decode(input_ids[0], skip_special_tokens=True))

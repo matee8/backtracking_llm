@@ -33,7 +33,7 @@ def predict_next_token(
     try:
         model.eval()
 
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs: modeling_outputs.CausalLMOutputWithCrossAttentions = model(
                 input_ids)
             logits: torch.Tensor = outputs.logits[:, -1, :]

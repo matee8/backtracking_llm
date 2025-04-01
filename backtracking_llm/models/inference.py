@@ -1,3 +1,4 @@
+import typing
 import logging
 import torch
 import torch.nn.functional as F
@@ -7,7 +8,8 @@ from transformers import modeling_outputs
 
 def load_model_and_tokenizer(
     model_name: str = "gpt2"
-) -> tuple[transformers.PreTrainedModel, transformers.PreTrainedTokenizer]:
+) -> typing.Tuple[transformers.PreTrainedModel,
+                  transformers.PreTrainedTokenizer]:
     try:
         tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
 
@@ -20,14 +22,14 @@ def load_model_and_tokenizer(
         return model, tokenizer
     except Exception as e:
         logging.error("Failed to load model or tokenizer: %s", str(e))
-        raise ValueError(f"Error loading model or tokenizer: {str(e)}") from e
+        raise
 
 
 def predict_next_token(
     model: transformers.PreTrainedModel,
     input_ids: torch.Tensor,
     top_k: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> typing.Tuple[torch.Tensor, torch.Tensor]:
     try:
         model.eval()
 
@@ -51,7 +53,7 @@ def run_inference_loop(
     logger: logging.Logger,
     temperature: float = 1.0,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-) -> torch.Tensor | None:
+) -> typing.Optional[torch.Tensor]:
     try:
         input_ids: torch.Tensor = tokenizer(
             prompt, return_tensors="pt").input_ids.to(device)
@@ -85,7 +87,7 @@ def run_inference_loop(
                         probabilities[i].item(),
                     )
 
-                stats: dict[str, float] = _calculate_statistics(
+                stats: typing.Dict[str, float] = _calculate_statistics(
                     logits, probabilities)
 
                 for key, value in stats.items():
@@ -112,7 +114,7 @@ def run_inference_loop(
 def _calculate_statistics(
     logits: torch.Tensor,
     probabilities: torch.Tensor,
-) -> dict[str, float]:
+) -> typing.Dict[str, float]:
     if probabilities.numel() == 0 or logits.numel() == 0:
         raise ValueError("Cannot calculate statistics on empty tensors")
 

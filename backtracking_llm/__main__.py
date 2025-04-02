@@ -57,6 +57,12 @@ def _parse_arguments() -> argparse.Namespace:
         help="Sampling temperature (default: 1.0)",
     )
 
+    parser.add_argument(
+        "--answer-start",
+        type=str,
+        help="The start of the answer."
+    )
+
     return parser.parse_args()
 
 
@@ -91,6 +97,9 @@ def _main() -> None:
         chat: typing.List[typing.Dict[str, str]] = [
             {"role": "user", "content": args.prompt},
         ]
+
+        if args.answer_start is not None:
+            chat.append({"role": "assistant", "content": args.answer_start})
 
         formatted_prompt = tokenizer.apply_chat_template(
             chat,

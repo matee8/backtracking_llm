@@ -20,7 +20,7 @@ def _parse_arguments() -> argparse.Namespace:
         "--model",
         type=str,
         default="gpt2",
-        help="Model name to use (default: gpt2)",
+        help="Model name to use (default: %(default)s)",
     )
 
     parser.add_argument(
@@ -34,14 +34,14 @@ def _parse_arguments() -> argparse.Namespace:
         "--max-length",
         type=int,
         default=100,
-        help="Maximum number of tokens to generate (default: 10)",
+        help="Maximum number of tokens to generate (default: %(default)s)",
     )
 
     parser.add_argument(
         "--top-k",
         type=int,
         default=50,
-        help="Number of top tokens to analyze (default: 50)",
+        help="Number of top tokens to analyze (default: %(default)s)",
     )
 
     parser.add_argument(
@@ -54,7 +54,7 @@ def _parse_arguments() -> argparse.Namespace:
         "--temperature",
         type=float,
         default=1.0,
-        help="Sampling temperature (default: 1.0)",
+        help="Sampling temperature (default: %(default)s)",
     )
 
     parser.add_argument(

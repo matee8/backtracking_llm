@@ -2,12 +2,11 @@
 
 import argparse
 import logging
-import typing
 import sys
 
 import transformers
 
-from backtracking_llm.models import inference
+from backtracking_llm.models import inference, question_answering
 
 DEFAULT_MAX_LENGTH = 100
 DEFAULT_TOP_K = 50
@@ -23,13 +22,6 @@ def _parse_arguments() -> argparse.Namespace:
         "--model",
         type=str,
         help="Model name to use",
-    )
-
-    parser.add_argument(
-        "--prompt",
-        type=str,
-        required=True,
-        help="Prompt to start generation",
     )
 
     parser.add_argument(
@@ -85,42 +77,17 @@ def _main() -> None:
         tokenizer: transformers.PreTrainedTokenizer
         model, tokenizer = inference.load_model_and_tokenizer(args.model)
     except Exception:
-        logger.error("Failed to load model %s", args.model, exc_info=True)
-        logger.error("Please ensure the model name is correct and you have an"
-                     " internet connection if needed.")
+        logger.critical("Failed to load model %s", args.model, exc_info=True)
+        logger.critical("Please ensure the model name is correct and you have"
+                        " an internet connection if needed.")
         sys.exit(1)
 
-    try:
-        chat: typing.List[typing.Dict[str, str]] = [
-            {
-                "role": "user",
-                "content": args.prompt
-            },
-        ]
-
-        if args.answer_start is not None:
-            chat.append({"role": "assistant", "content": args.answer_start})
-
-        formatted_prompt = tokenizer.apply_chat_template(
-            chat, tokenize=False, continue_final_message=True)
-
-        if not isinstance(formatted_prompt, str):
-            logger.error("Failed to apply chat template for model %s",
-                         args.model)
-            sys.exit(1)
-
-        inference.run_inference_loop(model=model,
-                                     tokenizer=tokenizer,
-                                     prompt=formatted_prompt,
-                                     max_length=args.max_length,
-                                     top_k=args.top_k,
-                                     logger=logger,
-                                     temperature=args.temperature)
-    except Exception as e:
-        logger.error("An error occurred during the inference loop: %e",
-                     e,
-                     exc_info=True)
-        sys.exit(1)
+    question_answering.run_qa_loop(model=model,
+                                   tokenizer=tokenizer,
+                                   logger=logger,
+                                   max_length_per_turn=args.max_length,
+                                   top_k=args.top_k,
+                                   temperature=args.temperature)
 
 
 if __name__ == "__main__":

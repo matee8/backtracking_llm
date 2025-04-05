@@ -12,7 +12,7 @@ from backtracking_llm.models import inference
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run inference on GPT-2 and analyze token logits " \
+        description="Run inference on GPT-2 and analyze token logits "
         "and probabilites"
     )
 
@@ -88,7 +88,7 @@ def _main() -> None:
         model, tokenizer = inference.load_model_and_tokenizer(args.model)
     except Exception:
         logger.error("Failed to load model %s", args.model, exc_info=True)
-        logger.error("Please ensure the model name is correct and you have an" \
+        logger.error("Please ensure the model name is correct and you have an"
                      " internet connection if needed.")
         sys.exit(1)
 

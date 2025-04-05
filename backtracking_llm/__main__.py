@@ -17,8 +17,7 @@ DEFAULT_TEMPERATURE = 1.
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run inference on GPT-2 and analyze token logits "
-        "and probabilites"
-    )
+        "and probabilites")
 
     parser.add_argument(
         "--model",
@@ -47,11 +46,9 @@ def _parse_arguments() -> argparse.Namespace:
         help="Number of top tokens to analyze (default: %(default)s)",
     )
 
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging"
-    )
+    parser.add_argument("--verbose",
+                        action="store_true",
+                        help="Enable verbose logging")
 
     parser.add_argument(
         "--temperature",
@@ -60,11 +57,9 @@ def _parse_arguments() -> argparse.Namespace:
         help="Sampling temperature (default: %(default)s)",
     )
 
-    parser.add_argument(
-        "--answer-start",
-        type=str,
-        help="The start of the answer."
-    )
+    parser.add_argument("--answer-start",
+                        type=str,
+                        help="The start of the answer.")
 
     return parser.parse_args()
 
@@ -97,35 +92,35 @@ def _main() -> None:
 
     try:
         chat: typing.List[typing.Dict[str, str]] = [
-            {"role": "user", "content": args.prompt},
+            {
+                "role": "user",
+                "content": args.prompt
+            },
         ]
 
         if args.answer_start is not None:
             chat.append({"role": "assistant", "content": args.answer_start})
 
         formatted_prompt = tokenizer.apply_chat_template(
-            chat,
-            tokenize=False,
-            continue_final_message=True
-        )
+            chat, tokenize=False, continue_final_message=True)
 
         if not isinstance(formatted_prompt, str):
-            logger.error(
-                "Failed to apply chat template for model %s", args.model)
+            logger.error("Failed to apply chat template for model %s",
+                         args.model)
             sys.exit(1)
 
         inference.run_inference_loop(model=model,
-                                tokenizer=tokenizer,
-                                prompt=formatted_prompt,
-                                max_length=args.max_length,
-                                top_k=args.top_k,
-                                logger=logger,
-                                temperature=args.temperature)
+                                     tokenizer=tokenizer,
+                                     prompt=formatted_prompt,
+                                     max_length=args.max_length,
+                                     top_k=args.top_k,
+                                     logger=logger,
+                                     temperature=args.temperature)
     except Exception as e:
         logger.error("An error occurred during the inference loop: %e",
                      e,
                      exc_info=True)
-        sys.exit(1) 
+        sys.exit(1)
 
 
 if __name__ == "__main__":

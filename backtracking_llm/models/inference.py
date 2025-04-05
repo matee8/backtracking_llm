@@ -19,8 +19,7 @@ def load_model_and_tokenizer(
         if tokenizer.pad_token is None:
             logging.info(
                 "Tokenizer for '%s' has no pad token set. "
-                "Setting to EOS token.",
-                model_name)
+                "Setting to EOS token.", model_name)
 
             tokenizer.pad_token = tokenizer.eos_token
             model.config.pad_token_id = model.config.eos_token_id
@@ -72,7 +71,9 @@ def predict_next_token(
         logging.error(
             "An unexpected error occured during next token prediction: "
             "(input shape: %s): %s",
-            input_ids.shape, e, exc_info=True)
+            input_ids.shape,
+            e,
+            exc_info=True)
         raise
 
 
@@ -107,23 +108,25 @@ def run_inference_loop(
             top_k_logits: torch.Tensor
             top_k_logits, top_k_indices = predict_next_token(
                 model, generated_ids, top_k)
-            top_k_logits = top_k_logits.ravel()
-            top_k_indices = top_k_indices.ravel()
+            top_k_logits_seq: torch.Tensor = top_k_logits[0]
+            top_k_indices_seq: torch.Tensor = top_k_indices[0]
 
             if temperature == 0.:
-                probabilities: torch.Tensor = F.softmax(top_k_logits, dim=-1)
+                probabilities: torch.Tensor = F.softmax(top_k_logits_seq,
+                                                        dim=-1)
 
                 chosen_token_relative_idx: torch.Tensor = torch.argmax(
-                    top_k_logits)
+                    top_k_logits_seq)
             else:
-                probabilities: torch.Tensor = F.softmax(top_k_logits /
+                probabilities: torch.Tensor = F.softmax(top_k_logits_seq /
                                                         temperature,
                                                         dim=-1)
 
                 chosen_token_relative_idx: torch.Tensor = torch.multinomial(
-                    probabilities, num_samples=1)
+                    probabilities, num_samples=1).squeeze()
 
-            chosen_token_id = top_k_indices[chosen_token_relative_idx]
+            chosen_token_id = top_k_indices_seq[
+                chosen_token_relative_idx].unsqueeze(0)
 
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
@@ -133,13 +136,13 @@ def run_inference_loop(
                 for i in range(top_k):
                     logging.debug(
                         "Token: %s, logit: %r, probability: %r",
-                        tokenizer.decode(top_k_indices[i].item()),
-                        top_k_logits[i].item(),
+                        tokenizer.decode(top_k_indices_seq[i].item()),
+                        top_k_logits_seq[i].item(),
                         probabilities[i].item(),
                     )
 
                 stats: typing.Dict[str, float] = _calculate_statistics(
-                    top_k_logits, probabilities)
+                    top_k_logits_seq, probabilities)
 
                 for key, value in stats.items():
                     logging.debug("%s: %r", key, value)
@@ -152,7 +155,7 @@ def run_inference_loop(
                 break
 
             generated_ids: torch.Tensor = torch.cat(
-                [generated_ids, chosen_token_id.reshape(1, -1)], dim=-1)
+                [generated_ids, chosen_token_id.view(1, 1)], dim=-1)
 
         logging.debug(
             "Generated text: %s",
@@ -185,8 +188,7 @@ def _calculate_statistics(
     if logits.shape != probabilities.shape:
         raise ValueError(
             f"Logits shape {logits.shape} must match probabilites "
-            f"shape {probabilities.shape}"
-        )
+            f"shape {probabilities.shape}")
 
     top_logit_value = logits[0].item()
 

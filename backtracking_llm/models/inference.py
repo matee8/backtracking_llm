@@ -100,8 +100,9 @@ def run_inference_loop(
             raise
 
         generated_ids: torch.Tensor = input_ids
+        num_prompt_tokens: int = input_ids.shape[-1]
 
-        for _ in range(max_length - input_ids.shape[-1]):
+        for _ in range(max_length - num_prompt_tokens):
             top_k_indices: torch.Tensor
             top_k_logits: torch.Tensor
             top_k_logits, top_k_indices = predict_next_token(

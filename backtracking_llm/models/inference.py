@@ -18,7 +18,7 @@ def load_model_and_tokenizer(
 
         if tokenizer.pad_token is None:
             logging.info(
-                "Tokenizer for '%s' has no pad token set. " \
+                "Tokenizer for '%s' has no pad token set. "
                 "Setting to EOS token.",
                 model_name)
 
@@ -70,7 +70,7 @@ def predict_next_token(
         raise
     except Exception as e:
         logging.error(
-            "An unexpected error occured during next token prediction: " \
+            "An unexpected error occured during next token prediction: "
             "(input shape: %s): %s",
             input_ids.shape, e, exc_info=True)
         raise
@@ -83,7 +83,7 @@ def run_inference_loop(
     max_length: int,
     top_k: int,
     logger: logging.Logger,
-    temperature: float = 1.0,
+    temperature: float = 1.,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ) -> typing.Optional[torch.Tensor]:
     try:
@@ -183,7 +183,7 @@ def _calculate_statistics(
 
     if logits.shape != probabilities.shape:
         raise ValueError(
-            f"Logits shape {logits.shape} must match probabilites " \
+            f"Logits shape {logits.shape} must match probabilites "
             f"shape {probabilities.shape}"
         )
 
@@ -199,7 +199,7 @@ def _calculate_statistics(
     if probabilities.numel() > 1:
         second_prob_value = probabilities[1].item()
     else:
-        second_prob_value = 0.0
+        second_prob_value = 0.
 
     stats = {}
 

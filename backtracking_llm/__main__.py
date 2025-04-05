@@ -9,6 +9,10 @@ import transformers
 
 from backtracking_llm.models import inference
 
+DEFAULT_MAX_LENGTH = 100
+DEFAULT_TOP_K = 50
+DEFAULT_TEMPERATURE = 1.
+
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -19,8 +23,7 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="gpt2",
-        help="Model name to use (default: %(default)s)",
+        help="Model name to use",
     )
 
     parser.add_argument(
@@ -33,14 +36,14 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--max-length",
         type=int,
-        default=100,
+        default=DEFAULT_MAX_LENGTH,
         help="Maximum number of tokens to generate (default: %(default)s)",
     )
 
     parser.add_argument(
         "--top-k",
         type=int,
-        default=50,
+        default=DEFAULT_TOP_K,
         help="Number of top tokens to analyze (default: %(default)s)",
     )
 
@@ -53,7 +56,7 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--temperature",
         type=float,
-        default=1.0,
+        default=DEFAULT_TEMPERATURE,
         help="Sampling temperature (default: %(default)s)",
     )
 

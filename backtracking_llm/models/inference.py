@@ -10,8 +10,7 @@ PastKeyValuesType = typing.Optional[typing.Tuple[typing.Tuple[torch.Tensor]]]
 
 
 def load_model_and_tokenizer(
-    model_name: str,
-    logger: logging.Logger
+    model_name: str, logger: logging.Logger
 ) -> typing.Tuple[transformers.PreTrainedModel,
                   transformers.PreTrainedTokenizer]:
     try:
@@ -19,21 +18,30 @@ def load_model_and_tokenizer(
 
         model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
 
-        if tokenizer.pad_token is None:
+        if tokenizer.pad_token is None and tokenizer.eos_token is not None:
             logger.info(
                 "Tokenizer for '%s' has no pad token set. "
                 "Setting to EOS token.", model_name)
 
             tokenizer.pad_token = tokenizer.eos_token
-            model.config.pad_token_id = model.config.eos_token_id
+
+            if hasattr(model, "config"):
+                model.config.pad_token_id = model.config.eos_token_id
+            else:
+                logger.warning("Could not set model.config.pad_token_id as "
+                               "model has no 'config' attribute")
+        elif tokenizer.pad_token_id is None and tokenizer.eos_token is None:
+            logger.warning(
+                "Tokenizer for '%s' has neither pad_token nor "
+                "eos_token. Padding may not work correctly.", model_name)
 
         logger.info("Successfully loaded model and tokenizer: %s", model_name)
         return model, tokenizer
     except (OSError, ValueError, RuntimeError) as e:
         logger.error("Failed to load model or tokenizer '%s' due to: %s",
-                      model_name,
-                      e,
-                      exc_info=True)
+                     model_name,
+                     e,
+                     exc_info=True)
         raise
     except Exception as e:
         logger.error(
@@ -44,10 +52,10 @@ def load_model_and_tokenizer(
         raise
 
 
-def predict_next_token(model: transformers.PreTrainedModel,
-                       input_ids: torch.Tensor,
-                       top_k: int,
-                       logger: logging.Logger) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+def predict_next_token(
+        model: transformers.PreTrainedModel, input_ids: torch.Tensor,
+        top_k: int,
+        logger: logging.Logger) -> typing.Tuple[torch.Tensor, torch.Tensor]:
     try:
         model.eval()
 
@@ -59,9 +67,9 @@ def predict_next_token(model: transformers.PreTrainedModel,
         with context_manager:
             outputs: modeling_outputs.CausalLMOutputWithCrossAttentions = model(
                 input_ids)
-            logits: torch.Tensor = outputs.logits[:, -1, :]
+            next_token_logits: torch.Tensor = outputs.logits[:, -1, :]
 
-            return torch.topk(logits, top_k)
+            return torch.topk(next_token_logits, top_k)
     except (RuntimeError, ValueError, IndexError) as e:
         logger.error(
             "Error during next token prediction (input shape: %s): %s",
@@ -80,15 +88,19 @@ def predict_next_token(model: transformers.PreTrainedModel,
 
 
 def run_inference_loop(
-    model: transformers.PreTrainedModel,
-    tokenizer: transformers.PreTrainedTokenizer,
-    prompt: str | torch.Tensor,
-    max_answer_length: int,
-    top_k: int,
-    logger: logging.Logger,
-    temperature: float = 1.,
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
-) -> typing.Optional[torch.Tensor]:
+        model: transformers.PreTrainedModel,
+        tokenizer: transformers.PreTrainedTokenizer,
+        prompt: str | torch.Tensor,
+        max_answer_length: int,
+        top_k: int,
+        logger: logging.Logger,
+        temperature: float = 1.,
+        device: typing.Optional[str] = None) -> typing.Optional[torch.Tensor]:
+    if device is None:
+        if torch.cuda.is_available():
+            device = "cuda"
+        else:
+            device = "cpu"
     try:
         model.to(device)
 
@@ -103,17 +115,24 @@ def run_inference_loop(
                              exc_info=True)
                 raise
         else:
-            input_ids: torch.Tensor = prompt
+            input_ids: torch.Tensor = prompt.to(device)
 
         generated_ids: torch.Tensor = input_ids
 
-        for _ in range(max_answer_length):
-            top_k_indices: torch.Tensor
-            top_k_logits: torch.Tensor
-            top_k_logits, top_k_indices = predict_next_token(
-                model, generated_ids, top_k, logger)
-            top_k_logits_seq: torch.Tensor = top_k_logits[0]
-            top_k_indices_seq: torch.Tensor = top_k_indices[0]
+        for step in range(max_answer_length):
+            try:
+                top_k_indices: torch.Tensor
+                top_k_logits: torch.Tensor
+                top_k_logits, top_k_indices = predict_next_token(
+                    model, generated_ids, top_k, logger)
+                top_k_logits_seq: torch.Tensor = top_k_logits[0]
+                top_k_indices_seq: torch.Tensor = top_k_indices[0]
+            except Exception as e:
+                logger.error("Prediction failed at step %d: %s",
+                             step,
+                             e,
+                             exc_info=True)
+                return None
 
             if temperature == 0.:
                 probabilities: torch.Tensor = F.softmax(top_k_logits_seq,
@@ -136,23 +155,31 @@ def run_inference_loop(
                 logger.debug("Iteration %d",
                              len(generated_ids[0]) - len(input_ids))
 
-                for i in range(top_k):
-                    logging.debug(
-                        "Token: %s, logit: %r, probability: %r",
-                        tokenizer.decode(top_k_indices_seq[i].item()),
+                decoded_tokens: typing.List[str] = []
+                for idx in top_k_indices_seq:
+                    decoded_tokens.append(tokenizer.decode(idx.item()))
+
+                for i in range(min(top_k, len(decoded_tokens))):
+                    logger.debug(
+                        "  Rank %d: Token: '%s' (ID: %d), Logit: %.4f "
+                        "Probability: %.4f", i + 1, decoded_tokens[i],
+                        top_k_indices_seq[i].item(),
                         top_k_logits_seq[i].item(), probabilities[i].item())
 
                 stats: typing.Dict[str, float] = _calculate_statistics(
                     top_k_logits_seq, probabilities)
 
                 for key, value in stats.items():
-                    logging.debug("%s: %r", key, value)
+                    logging.debug("%s: %.4f", key, value)
 
                 logging.debug("Chosen token: %s",
                               tokenizer.decode(chosen_token_id.item()))
 
-            if chosen_token_id.item() == tokenizer.eos_token_id:
-                logging.debug("EOS token generated. Stopping inference.")
+            if tokenizer.eos_token_id is not None and chosen_token_id.item(
+            ) == tokenizer.eos_token_id:
+                logging.debug(
+                    "EOS token detected at step %d. Stopping inference.",
+                    step + 1)
                 break
 
             generated_ids: torch.Tensor = torch.cat(
@@ -165,7 +192,11 @@ def run_inference_loop(
         return generated_ids
     except KeyboardInterrupt:
         logging.warning("Inference interrupted by user")
-        return None
+        if "generated_ids" in locals() and generated_ids.numel(
+        ) > input_ids.numel():
+            return generated_ids
+        else:
+            return None
     except (RuntimeError, ValueError) as e:
         logger.error("Error during inference loop: %s", e, exc_info=True)
         raise
@@ -178,30 +209,34 @@ def run_inference_loop(
 
 
 def _calculate_statistics(
-    logits: torch.Tensor,
-    probabilities: torch.Tensor,
+    top_k_logits: torch.Tensor,
+    top_k_probabilities: torch.Tensor,
 ) -> typing.Dict[str, float]:
-    if logits.numel() == 0 or probabilities.numel() == 0:
+    if top_k_logits.dim() != 1 or top_k_probabilities.dim() != 1:
+        raise ValueError("Input tensors must be 1D. Got shapes: "
+                         f"{top_k_logits.shape}, {top_k_probabilities.shape}")
+
+    if top_k_logits.numel() == 0 or top_k_probabilities.numel() == 0:
         raise ValueError(
             "Cannot calculate statistics on empty logit or probability tensors"
         )
 
-    if logits.shape != probabilities.shape:
+    if top_k_logits.shape != top_k_probabilities.shape:
         raise ValueError(
-            f"Logits shape {logits.shape} must match probabilites "
-            f"shape {probabilities.shape}")
+            f"Logits shape {top_k_logits.shape} must match probabilites "
+            f"shape {top_k_probabilities.shape}")
 
-    top_logit_value = logits[0].item()
+    top_logit_value = top_k_logits[0].item()
 
-    if logits.numel() > 1:
-        second_logit_value = logits[1].item()
+    if top_k_logits.numel() > 1:
+        second_logit_value = top_k_logits[1].item()
     else:
         second_logit_value = float("inf")
 
-    top_prob_value = probabilities[0].item()
+    top_prob_value = top_k_probabilities[0].item()
 
-    if probabilities.numel() > 1:
-        second_prob_value = probabilities[1].item()
+    if top_k_probabilities.numel() > 1:
+        second_prob_value = top_k_probabilities[1].item()
     else:
         second_prob_value = 0.
 
@@ -228,6 +263,6 @@ def _calculate_statistics(
         stats["prob_ratio"] = float("inf")
 
     stats["prob_entropy"] = -torch.sum(
-        probabilities * torch.log(probabilities + epsilon)).item()
+        top_k_probabilities * torch.log(top_k_probabilities + epsilon)).item()
 
     return stats

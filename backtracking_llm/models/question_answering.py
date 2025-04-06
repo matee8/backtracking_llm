@@ -38,9 +38,15 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                     add_generation_prompt=True,
                     return_tensors="pt")
 
-                if not isinstance(formatted_prompt_ids, torch.Tensor):
-                    logger.error("Failed to apply chat template.")
-                    chat_history.pop()
+                if not isinstance(
+                        formatted_prompt_ids,
+                        torch.Tensor) or formatted_prompt_ids.numel() == 0:
+                    logger.error(
+                        "Failed to apply chat template. Check tokenizer "
+                        "configuration."
+                    )
+                    if chat_history:
+                        chat_history.pop()
                     continue
             except Exception as e:
                 logger.error("Failed to apply chat template: %s",
@@ -51,7 +57,7 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                 continue
 
             try:
-                num_prompt_tokens: int = formatted_prompt_ids.numel()
+                num_prompt_tokens: int = formatted_prompt_ids.shape[-1]
 
                 generated_ids: typing.Optional[
                     torch.Tensor] = inference.run_inference_loop(
@@ -62,7 +68,7 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                         top_k=top_k,
                         logger=logger,
                         temperature=temperature)
-            except Exception as e:
+            except Exception:
                 logger.error("An error occured during model inference.")
 
                 if chat_history:
@@ -88,7 +94,7 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                     logger.error("Failed to decode or print the answer: %s",
                                  e,
                                  exc_info=True)
-                    if chat_history and chat_history[-1]:
+                    if chat_history and chat_history[-1]["role"] == "user":
                         chat_history.pop()
             elif generated_ids is not None:
                 logger.warning("Model did not generate any new tokens.")

@@ -64,7 +64,8 @@ def _main() -> None:
     try:
         model: transformers.PreTrainedModel
         tokenizer: transformers.PreTrainedTokenizer
-        model, tokenizer = inference.load_model_and_tokenizer(args.model, logger)
+        model, tokenizer = inference.load_model_and_tokenizer(
+            args.model, logger)
     except Exception:
         logger.critical("Please ensure the model name is correct and you have"
                         " an internet connection if needed.")

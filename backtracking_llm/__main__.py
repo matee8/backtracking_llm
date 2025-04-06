@@ -25,10 +25,11 @@ def _parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--max-length",
+        "--max-answer-length",
         type=int,
         default=DEFAULT_MAX_LENGTH,
-        help="Maximum number of tokens to generate (default: %(default)s)",
+        help="Maximum number of tokens to generate for each answer "
+            "(default: %(default)s)",
     )
 
     parser.add_argument(
@@ -85,7 +86,7 @@ def _main() -> None:
     question_answering.run_qa_loop(model=model,
                                    tokenizer=tokenizer,
                                    logger=logger,
-                                   max_length_per_turn=args.max_length,
+                                   max_length_per_turn=args.max_answer_length,
                                    top_k=args.top_k,
                                    temperature=args.temperature)
 

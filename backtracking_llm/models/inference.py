@@ -81,7 +81,7 @@ def run_inference_loop(
     model: transformers.PreTrainedModel,
     tokenizer: transformers.PreTrainedTokenizer,
     prompt: str,
-    max_length: int,
+    max_answer_length: int,
     top_k: int,
     logger: logging.Logger,
     temperature: float = 1.,
@@ -101,9 +101,9 @@ def run_inference_loop(
             raise
 
         generated_ids: torch.Tensor = input_ids
-        num_prompt_tokens: int = input_ids.shape[-1]
 
-        for _ in range(max_length - num_prompt_tokens):
+
+        for _ in range(max_answer_length):
             top_k_indices: torch.Tensor
             top_k_logits: torch.Tensor
             top_k_logits, top_k_indices = predict_next_token(

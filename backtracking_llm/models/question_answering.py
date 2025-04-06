@@ -65,7 +65,7 @@ def run_qa_loop(
                         model=model,
                         tokenizer=tokenizer,
                         prompt=formatted_prompt,
-                        max_length=max_length_per_turn,
+                        max_answer_length=max_length_per_turn,
                         top_k=top_k,
                         logger=logger,
                         temperature=temperature,

@@ -53,9 +53,10 @@ def load_model_and_tokenizer(
 
 
 def predict_next_token(
-        model: transformers.PreTrainedModel, input_ids: torch.Tensor,
-        top_k: int,
-        logger: logging.Logger) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+    model: transformers.PreTrainedModel, input_ids: torch.Tensor,
+    top_k: int,
+    logger: logging.Logger,
+    past_key_values: typing.Optional[PastKeyValuesType] = None) -> typing.Tuple[torch.Tensor, torch.Tensor, PastKeyValuesType]:
     try:
         model.eval()
 
@@ -66,10 +67,17 @@ def predict_next_token(
 
         with context_manager:
             outputs: modeling_outputs.CausalLMOutputWithCrossAttentions = model(
-                input_ids)
+                input_ids=input_ids,
+                past_key_values=past_key_values,
+                use_cache=True)
             next_token_logits: torch.Tensor = outputs.logits[:, -1, :]
+            updated_past_key_values: PastKeyValuesType = outputs.past_key_values
 
-            return torch.topk(next_token_logits, top_k)
+            top_k_logits: torch.Tensor
+            top_k_indices: torch.Tensor
+            top_k_logits, top_k_indices = torch.topk(next_token_logits, top_k)
+
+            return top_k_logits, top_k_indices, updated_past_key_values
     except (RuntimeError, ValueError, IndexError) as e:
         logger.error(
             "Error during next token prediction (input shape: %s): %s",
@@ -119,12 +127,15 @@ def run_inference_loop(
 
         generated_ids: torch.Tensor = input_ids
 
+        past_key_values: PastKeyValuesType = None
+        current_input_ids: torch.Tensor = input_ids
+
         for step in range(max_answer_length):
             try:
                 top_k_indices: torch.Tensor
                 top_k_logits: torch.Tensor
-                top_k_logits, top_k_indices = predict_next_token(
-                    model, generated_ids, top_k, logger)
+                top_k_logits, top_k_indices, past_key_values = predict_next_token(
+                    model=model, input_ids=current_input_ids, top_k=top_k, logger=logger, past_key_values=past_key_values)
                 top_k_logits_seq: torch.Tensor = top_k_logits[0]
                 top_k_indices_seq: torch.Tensor = top_k_indices[0]
             except Exception as e:
@@ -184,6 +195,7 @@ def run_inference_loop(
 
             generated_ids: torch.Tensor = torch.cat(
                 [generated_ids, chosen_token_id.view(1, 1)], dim=-1)
+            current_input_ids = chosen_token_id.view(1, 1)
 
         logging.debug(
             "Generated text: %s",

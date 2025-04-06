@@ -6,9 +6,12 @@ import torch.nn.functional as F
 import transformers
 from transformers import modeling_outputs
 
+PastKeyValuesType = typing.Optional[typing.Tuple[typing.Tuple[torch.Tensor]]]
+
 
 def load_model_and_tokenizer(
-    model_name: str = "gpt2"
+    model_name: str,
+    logger: logging.Logger
 ) -> typing.Tuple[transformers.PreTrainedModel,
                   transformers.PreTrainedTokenizer]:
     try:
@@ -17,23 +20,23 @@ def load_model_and_tokenizer(
         model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
 
         if tokenizer.pad_token is None:
-            logging.info(
+            logger.info(
                 "Tokenizer for '%s' has no pad token set. "
                 "Setting to EOS token.", model_name)
 
             tokenizer.pad_token = tokenizer.eos_token
             model.config.pad_token_id = model.config.eos_token_id
 
-        logging.info("Successfully loaded model and tokenizer: %s", model_name)
+        logger.info("Successfully loaded model and tokenizer: %s", model_name)
         return model, tokenizer
     except (OSError, ValueError, RuntimeError) as e:
-        logging.error("Failed to load model or tokenizer '%s' due to: %s",
+        logger.error("Failed to load model or tokenizer '%s' due to: %s",
                       model_name,
                       e,
                       exc_info=True)
         raise
     except Exception as e:
-        logging.error(
+        logger.error(
             "An unexpected error occured while loading model '%s': %s",
             model_name,
             e,
@@ -43,7 +46,8 @@ def load_model_and_tokenizer(
 
 def predict_next_token(model: transformers.PreTrainedModel,
                        input_ids: torch.Tensor,
-                       top_k: int) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+                       top_k: int,
+                       logger: logging.Logger) -> typing.Tuple[torch.Tensor, torch.Tensor]:
     try:
         model.eval()
 
@@ -59,14 +63,14 @@ def predict_next_token(model: transformers.PreTrainedModel,
 
             return torch.topk(logits, top_k)
     except (RuntimeError, ValueError, IndexError) as e:
-        logging.error(
+        logger.error(
             "Error during next token prediction (input shape: %s): %s",
             input_ids.shape,
             e,
             exc_info=True)
         raise
     except Exception as e:
-        logging.error(
+        logger.error(
             "An unexpected error occured during next token prediction: "
             "(input shape: %s): %s",
             input_ids.shape,
@@ -107,7 +111,7 @@ def run_inference_loop(
             top_k_indices: torch.Tensor
             top_k_logits: torch.Tensor
             top_k_logits, top_k_indices = predict_next_token(
-                model, generated_ids, top_k)
+                model, generated_ids, top_k, logger)
             top_k_logits_seq: torch.Tensor = top_k_logits[0]
             top_k_indices_seq: torch.Tensor = top_k_indices[0]
 

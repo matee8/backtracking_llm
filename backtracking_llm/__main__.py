@@ -42,19 +42,17 @@ def _parse_arguments() -> argparse.Namespace:
                         default=DEFAULT_TEMPERATURE,
                         help="Sampling temperature (default: %(default)s)")
 
-    parser.add_argument("--answer-start",
-                        type=str,
-                        help="The start of the answer.")
-
     return parser.parse_args()
 
 
 def _setup_logging(verbose: bool = False) -> logging.Logger:
     log_level: int = logging.DEBUG if verbose else logging.INFO
+    log_format: str = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
 
     logging.basicConfig(level=log_level,
-                        format="%(asctime)s - %(levelname)s - %(message)s",
-                        handlers=[logging.StreamHandler(sys.stdout)])
+                        format=log_format,
+                        handlers=[logging.StreamHandler(sys.stdout)],
+                        force=True)
 
     return logging.getLogger(__name__)
 
@@ -66,9 +64,8 @@ def _main() -> None:
     try:
         model: transformers.PreTrainedModel
         tokenizer: transformers.PreTrainedTokenizer
-        model, tokenizer = inference.load_model_and_tokenizer(args.model)
+        model, tokenizer = inference.load_model_and_tokenizer(args.model, logger)
     except Exception:
-        logger.critical("Failed to load model %s", args.model, exc_info=True)
         logger.critical("Please ensure the model name is correct and you have"
                         " an internet connection if needed.")
         sys.exit(1)

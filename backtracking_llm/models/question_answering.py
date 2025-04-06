@@ -63,9 +63,7 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                         logger=logger,
                         temperature=temperature)
             except Exception as e:
-                logger.error("Error during model inference: %s",
-                             e,
-                             exc_info=True)
+                logger.error("An error occured during model inference.")
 
                 if chat_history:
                     chat_history.pop()

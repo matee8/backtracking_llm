@@ -151,7 +151,7 @@ def run_inference_loop(
                               tokenizer.decode(chosen_token_id.item()))
 
             if chosen_token_id.item() == tokenizer.eos_token_id:
-                logging.info("EOS token generated. Stopping inference.")
+                logging.debug("EOS token generated. Stopping inference.")
                 break
 
             generated_ids: torch.Tensor = torch.cat(

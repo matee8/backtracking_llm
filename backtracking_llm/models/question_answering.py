@@ -33,16 +33,15 @@ def run_qa_loop(model: transformers.PreTrainedModel,
             chat_history.append({"role": "user", "content": user_input})
 
             try:
-                formatted_prompt = tokenizer.apply_chat_template(
-                    chat_history, tokenize=False, add_generation_prompt=True)
+                formatted_prompt_ids = tokenizer.apply_chat_template(
+                    chat_history,
+                    add_generation_prompt=True,
+                    return_tensors="pt")
 
-                if not isinstance(formatted_prompt, str):
+                if not isinstance(formatted_prompt_ids, torch.Tensor):
                     logger.error("Failed to apply chat template.")
                     chat_history.pop()
                     continue
-
-                logger.debug("Formatted prompt for the model: %s",
-                             formatted_prompt)
             except Exception as e:
                 logger.error("Failed to apply chat template: %s",
                              e,
@@ -52,15 +51,13 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                 continue
 
             try:
-                prompt_input_ids: torch.Tensor = tokenizer(
-                    formatted_prompt, return_tensors="pt").input_ids
-                num_prompt_tokens: int = prompt_input_ids.shape[-1]
+                num_prompt_tokens: int = formatted_prompt_ids.numel()
 
                 generated_ids: typing.Optional[
                     torch.Tensor] = inference.run_inference_loop(
                         model=model,
                         tokenizer=tokenizer,
-                        prompt=formatted_prompt,
+                        prompt=formatted_prompt_ids,
                         max_answer_length=max_length_per_turn,
                         top_k=top_k,
                         logger=logger,

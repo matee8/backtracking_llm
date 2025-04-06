@@ -78,7 +78,7 @@ def predict_next_token(model: transformers.PreTrainedModel,
 def run_inference_loop(
     model: transformers.PreTrainedModel,
     tokenizer: transformers.PreTrainedTokenizer,
-    prompt: str,
+    prompt: str | torch.Tensor,
     max_answer_length: int,
     top_k: int,
     logger: logging.Logger,
@@ -88,15 +88,18 @@ def run_inference_loop(
     try:
         model.to(device)
 
-        try:
-            input_ids: torch.Tensor = tokenizer(
-                prompt, return_tensors="pt").input_ids.to(device)
-        except Exception as e:
-            logger.error("Failed to tokenize prompt '%s': %s",
-                         prompt,
-                         e,
-                         exc_info=True)
-            raise
+        if isinstance(prompt, str):
+            try:
+                input_ids: torch.Tensor = tokenizer(
+                    prompt, return_tensors="pt").input_ids.to(device)
+            except Exception as e:
+                logger.error("Failed to tokenize prompt '%s': %s",
+                             prompt,
+                             e,
+                             exc_info=True)
+                raise
+        else:
+            input_ids: torch.Tensor = prompt
 
         generated_ids: torch.Tensor = input_ids
 
@@ -126,9 +129,8 @@ def run_inference_loop(
                 chosen_token_relative_idx].unsqueeze(0)
 
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(
-                    "Iteration %d",
-                    len(generated_ids[0]) - len(tokenizer(prompt).input_ids))
+                logger.debug("Iteration %d",
+                             len(generated_ids[0]) - len(input_ids))
 
                 for i in range(top_k):
                     logging.debug(

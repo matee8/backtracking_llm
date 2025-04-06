@@ -23,7 +23,7 @@ def run_qa_loop(model: transformers.PreTrainedModel,
             try:
                 user_input: str = input("You: ")
             except (EOFError, KeyboardInterrupt):
-                logger.info("\nExiting QA loop due to keyboard interrupt.")
+                logger.info("Exiting QA loop due to keyboard interrupt.")
                 break
 
             if not user_input.strip():
@@ -104,7 +104,7 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                 if chat_history and chat_history[-1]["role"] == "user":
                     chat_history.pop()
     except KeyboardInterrupt:
-        logger.info("\nQA loop interrupted by keyboard interrupt. Exiting.")
+        logger.info("QA loop interrupted by keyboard interrupt. Exiting.")
     except Exception as e:
         logger.error("An unexpected error occurred in the QA loop: %s",
                      e,

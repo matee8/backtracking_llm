@@ -41,11 +41,9 @@ def load_model_and_tokenizer(
         raise
 
 
-def predict_next_token(
-    model: transformers.PreTrainedModel,
-    input_ids: torch.Tensor,
-    top_k: int,
-) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+def predict_next_token(model: transformers.PreTrainedModel,
+                       input_ids: torch.Tensor,
+                       top_k: int) -> typing.Tuple[torch.Tensor, torch.Tensor]:
     try:
         model.eval()
 
@@ -85,7 +83,7 @@ def run_inference_loop(
     top_k: int,
     logger: logging.Logger,
     temperature: float = 1.,
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
 ) -> typing.Optional[torch.Tensor]:
     try:
         model.to(device)
@@ -101,7 +99,6 @@ def run_inference_loop(
             raise
 
         generated_ids: torch.Tensor = input_ids
-
 
         for _ in range(max_answer_length):
             top_k_indices: torch.Tensor
@@ -137,9 +134,7 @@ def run_inference_loop(
                     logging.debug(
                         "Token: %s, logit: %r, probability: %r",
                         tokenizer.decode(top_k_indices_seq[i].item()),
-                        top_k_logits_seq[i].item(),
-                        probabilities[i].item(),
-                    )
+                        top_k_logits_seq[i].item(), probabilities[i].item())
 
                 stats: typing.Dict[str, float] = _calculate_statistics(
                     top_k_logits_seq, probabilities)

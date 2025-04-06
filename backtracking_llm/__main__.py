@@ -15,40 +15,32 @@ DEFAULT_TEMPERATURE = 1.
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run inference on GPT-2 and analyze token logits "
+        description="Run inference on any model and analyze token logits "
         "and probabilites")
 
-    parser.add_argument(
-        "--model",
-        type=str,
-        help="Model name to use",
-    )
+    parser.add_argument("--model", type=str, help="Model name to use")
 
     parser.add_argument(
         "--max-answer-length",
         type=int,
         default=DEFAULT_MAX_LENGTH,
         help="Maximum number of tokens to generate for each answer "
-            "(default: %(default)s)",
-    )
+        "(default: %(default)s)")
 
     parser.add_argument(
         "--top-k",
         type=int,
         default=DEFAULT_TOP_K,
-        help="Number of top tokens to analyze (default: %(default)s)",
-    )
+        help="Number of top tokens to analyze (default: %(default)s)")
 
     parser.add_argument("--verbose",
                         action="store_true",
                         help="Enable verbose logging")
 
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=DEFAULT_TEMPERATURE,
-        help="Sampling temperature (default: %(default)s)",
-    )
+    parser.add_argument("--temperature",
+                        type=float,
+                        default=DEFAULT_TEMPERATURE,
+                        help="Sampling temperature (default: %(default)s)")
 
     parser.add_argument("--answer-start",
                         type=str,
@@ -60,11 +52,9 @@ def _parse_arguments() -> argparse.Namespace:
 def _setup_logging(verbose: bool = False) -> logging.Logger:
     log_level: int = logging.DEBUG if verbose else logging.INFO
 
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
+    logging.basicConfig(level=log_level,
+                        format="%(asctime)s - %(levelname)s - %(message)s",
+                        handlers=[logging.StreamHandler(sys.stdout)])
 
     return logging.getLogger(__name__)
 

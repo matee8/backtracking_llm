@@ -9,14 +9,10 @@ import transformers
 from backtracking_llm.models import inference
 
 
-def run_qa_loop(
-    model: transformers.PreTrainedModel,
-    tokenizer: transformers.PreTrainedTokenizer,
-    logger: logging.Logger,
-    max_length_per_turn: int,
-    temperature: float,
-    top_k: int,
-):
+def run_qa_loop(model: transformers.PreTrainedModel,
+                tokenizer: transformers.PreTrainedTokenizer,
+                logger: logging.Logger, max_length_per_turn: int,
+                temperature: float, top_k: int):
     logger.info("Starting interactive Question-Answering session.")
     logger.info("Type your questions below, Press Ctrl+C to exit.")
 
@@ -68,8 +64,7 @@ def run_qa_loop(
                         max_answer_length=max_length_per_turn,
                         top_k=top_k,
                         logger=logger,
-                        temperature=temperature,
-                    )
+                        temperature=temperature)
             except Exception as e:
                 logger.error("Error during model inference: %s",
                              e,
@@ -92,7 +87,7 @@ def run_qa_loop(
 
                     chat_history.append({
                         "role": "assistant",
-                        "content": answer_text,
+                        "content": answer_text
                     })
                 except Exception as e:
                     logger.error("Failed to decode or print the answer: %s",

@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import transformers
 from transformers import modeling_outputs
 
+from backtracking_llm.models import decision
+
 PastKeyValuesType = typing.Optional[typing.Tuple[typing.Tuple[torch.Tensor]]]
 
 
@@ -53,10 +55,12 @@ def load_model_and_tokenizer(
 
 
 def predict_next_token(
-    model: transformers.PreTrainedModel, input_ids: torch.Tensor,
+    model: transformers.PreTrainedModel,
+    input_ids: torch.Tensor,
     top_k: int,
     logger: logging.Logger,
-    past_key_values: typing.Optional[PastKeyValuesType] = None) -> typing.Tuple[torch.Tensor, torch.Tensor, PastKeyValuesType]:
+    past_key_values: typing.Optional[PastKeyValuesType] = None
+) -> typing.Tuple[torch.Tensor, torch.Tensor, PastKeyValuesType]:
     try:
         model.eval()
 
@@ -102,7 +106,10 @@ def run_inference_loop(
         max_answer_length: int,
         top_k: int,
         logger: logging.Logger,
+        backtracking_decision_function: typing.Optional[
+            decision.BacktrackingDecisionFunctionType] = None,
         temperature: float = 1.,
+        backtrack_every_n: int = 5,
         device: typing.Optional[str] = None) -> typing.Optional[torch.Tensor]:
     if device is None:
         if torch.cuda.is_available():
@@ -126,16 +133,26 @@ def run_inference_loop(
             input_ids: torch.Tensor = prompt.to(device)
 
         generated_ids: torch.Tensor = input_ids
+        prompt_length: int = input_ids.shape[1]
 
         past_key_values: PastKeyValuesType = None
         current_input_ids: torch.Tensor = input_ids
 
         for step in range(max_answer_length):
             try:
-                top_k_indices: torch.Tensor
+                next_token_stats = typing.Tuple[torch.Tensor, torch.Tensor,
+                                                PastKeyValuesType]
+                next_token_stats = predict_next_token(
+                    model=model,
+                    input_ids=current_input_ids,
+                    top_k=top_k,
+                    logger=logger,
+                    past_key_values=past_key_values)
+
                 top_k_logits: torch.Tensor
-                top_k_logits, top_k_indices, past_key_values = predict_next_token(
-                    model=model, input_ids=current_input_ids, top_k=top_k, logger=logger, past_key_values=past_key_values)
+                top_k_indices: torch.Tensor
+                top_k_logits, top_k_indices, past_key_values = next_token_stats
+
                 top_k_logits_seq: torch.Tensor = top_k_logits[0]
                 top_k_indices_seq: torch.Tensor = top_k_indices[0]
             except Exception as e:
@@ -186,6 +203,51 @@ def run_inference_loop(
                 logging.debug("Chosen token: %s",
                               tokenizer.decode(chosen_token_id.item()))
 
+            num_generated_tokens: int = generated_ids.shape[1] - prompt_length
+            if backtracking_decision_function is not None and (
+                    num_generated_tokens
+                    > 0) and (step + 1) % backtrack_every_n == 0:
+                logger.debug("Calling backtrack decision function at step %d",
+                             step + 1)
+                try:
+                    backtrack: typing.Tuple[bool, int]
+                    backtrack = backtracking_decision_function(
+                        top_k_logits_seq, probabilities,
+                        chosen_token_relative_idx)
+
+                    should_backtrack: bool
+                    num_to_remove: int
+
+                    should_backtrack, num_to_remove = backtrack
+                except Exception as e:
+                    logger.error(
+                        "Error calling the decision functiona at step"
+                        " %d: %s",
+                        step + 1,
+                        e,
+                        exc_info=True)
+                    should_backtrack = False
+                    num_to_remove = 0
+
+                if should_backtrack:
+                    actual_num_to_remove = min(num_to_remove,
+                                               num_generated_tokens)
+
+                    logger.debug(
+                        "Backtracking triggered at step %d."
+                        "Removing %d token(s).", step + 1,
+                        actual_num_to_remove)
+
+                    if actual_num_to_remove > 1:
+                        generated_ids = generated_ids[:, :-(
+                            actual_num_to_remove - 1)]
+
+                    past_key_values = None
+
+                    current_input_ids = generated_ids
+
+                    continue
+
             if tokenizer.eos_token_id is not None and chosen_token_id.item(
             ) == tokenizer.eos_token_id:
                 logging.debug(
@@ -196,6 +258,10 @@ def run_inference_loop(
             generated_ids: torch.Tensor = torch.cat(
                 [generated_ids, chosen_token_id.view(1, 1)], dim=-1)
             current_input_ids = chosen_token_id.view(1, 1)
+
+            logging.debug(
+                "Generated text so far: %s",
+                tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 
         logging.debug(
             "Generated text: %s",

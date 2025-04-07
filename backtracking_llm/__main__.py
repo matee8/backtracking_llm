@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 
 import argparse
+import functools
 import logging
+import typing
 import sys
 
 import transformers
 
-from backtracking_llm.models import inference, question_answering
+from backtracking_llm.models import decision, inference, question_answering
 
 DEFAULT_MAX_LENGTH = 100
 DEFAULT_TOP_K = 50
 DEFAULT_TEMPERATURE = 1.
+DEFAULT_BACKTRACK_EVERY_N = 5
+DEFAULT_PROBABILITY_THRESHOLD = .5
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -42,6 +46,19 @@ def _parse_arguments() -> argparse.Namespace:
                         default=DEFAULT_TEMPERATURE,
                         help="Sampling temperature (default: %(default)s)")
 
+    parser.add_argument("--backtrack-every-n",
+                        type=int,
+                        default=DEFAULT_BACKTRACK_EVERY_N,
+                        help="Check for backtracking every N generated tokens."
+                        " (default: %(default)s)")
+
+    parser.add_argument(
+        "--probability-threshold",
+        type=float,
+        default=DEFAULT_PROBABILITY_THRESHOLD,
+        help="Probability threshold for the simple backtracking"
+        "decision function (default: %(default)s)")
+
     return parser.parse_args()
 
 
@@ -71,12 +88,22 @@ def _main() -> None:
                         " an internet connection if needed.")
         sys.exit(1)
 
-    question_answering.run_qa_loop(model=model,
-                                   tokenizer=tokenizer,
-                                   logger=logger,
-                                   max_length_per_turn=args.max_answer_length,
-                                   top_k=args.top_k,
-                                   temperature=args.temperature)
+    decision_function_config: typing.Dict[str, typing.Any] = {
+        "probability_threshold": args.probability_threshold,
+    }
+
+    configured_decision_func: functools.partial = functools.partial(
+        decision.simple_threshold_decision, config=decision_function_config)
+
+    question_answering.run_qa_loop(
+        model=model,
+        tokenizer=tokenizer,
+        logger=logger,
+        max_length_per_turn=args.max_answer_length,
+        top_k=args.top_k,
+        temperature=args.temperature,
+        backtrack_every_n=args.backtrack_every_n,
+        backtracking_decision_function=configured_decision_func)
 
 
 if __name__ == "__main__":

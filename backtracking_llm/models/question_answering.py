@@ -6,15 +6,21 @@ import typing
 import torch
 import transformers
 
-from backtracking_llm.models import inference
+from backtracking_llm.models import decision, inference
 
 
 def run_qa_loop(model: transformers.PreTrainedModel,
                 tokenizer: transformers.PreTrainedTokenizer,
                 logger: logging.Logger, max_length_per_turn: int,
-                temperature: float, top_k: int):
+                temperature: float, top_k: int, backtrack_every_n: int,
+                backtracking_decision_function: typing.Optional[
+                    decision.BacktrackingDecisionFunctionType]):
     logger.info("Starting interactive Question-Answering session.")
     logger.info("Type your questions below, Press Ctrl+C to exit.")
+    if backtracking_decision_function is not None:
+        logger.info("Backtracking: enabled.")
+    else:
+        logger.info("Backtracking: disabled.")
 
     chat_history: typing.List[typing.Dict[str, str]] = []
 
@@ -43,8 +49,7 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                         torch.Tensor) or formatted_prompt_ids.numel() == 0:
                     logger.error(
                         "Failed to apply chat template. Check tokenizer "
-                        "configuration."
-                    )
+                        "configuration.")
                     if chat_history:
                         chat_history.pop()
                     continue
@@ -67,9 +72,12 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                         max_answer_length=max_length_per_turn,
                         top_k=top_k,
                         logger=logger,
+                        backtracking_decision_function=
+                        backtracking_decision_function,
+                        backtrack_every_n=backtrack_every_n,
                         temperature=temperature)
-            except Exception:
-                logger.error("An error occured during model inference.")
+            except Exception as e:
+                logger.error("An error occured during model inference: %s.", e)
 
                 if chat_history:
                     chat_history.pop()

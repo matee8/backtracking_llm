@@ -63,7 +63,11 @@ def _parse_arguments() -> argparse.Namespace:
 
 
 def _setup_logging(verbose: bool = False) -> logging.Logger:
-    log_level: int = logging.DEBUG if verbose else logging.INFO
+    if verbose:
+        log_level: int = logging.DEBUG
+    else:
+        log_level: int = logging.INFO
+
     log_format: str = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
 
     logging.basicConfig(level=log_level,
@@ -100,8 +104,8 @@ def _main() -> None:
         tokenizer=tokenizer,
         logger=logger,
         max_length_per_turn=args.max_answer_length,
-        top_k=args.top_k,
         temperature=args.temperature,
+        top_k=args.top_k,
         backtrack_every_n=args.backtrack_every_n,
         backtracking_decision_function=configured_decision_func)
 

@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
 
+import functools
 import logging
 import typing
 
 import torch
 import transformers
 
-from backtracking_llm.models import decision, inference
 
-
-def run_qa_loop(model: transformers.PreTrainedModel,
-                tokenizer: transformers.PreTrainedTokenizer,
-                logger: logging.Logger, max_length_per_turn: int,
-                temperature: float, top_k: int, backtrack_every_n: int,
-                backtracking_decision_function: typing.Optional[
-                    decision.BacktrackingDecisionFunctionType]):
+def run_qa_loop(
+    model: transformers.PreTrainedModel,
+    tokenizer: transformers.PreTrainedTokenizer, logger: logging.Logger,
+    max_length_per_turn: int, temperature: float, top_k: int,
+    backtrack_every_n: int,
+    backtracking_decision_function: typing.Optional[functools.partial]
+) -> None:
     logger.info("Starting interactive Question-Answering session.")
-    logger.info("Type your questions below, Press Ctrl+C to exit.")
+    logger.info("Model: %s", model.name_or_path)
+    logger.info("Max length per turn: %d, Temperature: %.2f, Top-K: %d",
+                max_length_per_turn, temperature, top_k)
     if backtracking_decision_function is not None:
         logger.info("Backtracking: enabled.")
     else:
         logger.info("Backtracking: disabled.")
+    logger.info("Type your questions below, Press Ctrl+C to exit.")
 
     chat_history: typing.List[typing.Dict[str, str]] = []
 
@@ -72,12 +75,12 @@ def run_qa_loop(model: transformers.PreTrainedModel,
                         max_answer_length=max_length_per_turn,
                         top_k=top_k,
                         logger=logger,
-                        backtracking_decision_function=
-                        backtracking_decision_function,
+                        temperature=temperature,
                         backtrack_every_n=backtrack_every_n,
-                        temperature=temperature)
+                        backtracking_decision_function=
+                        backtracking_decision_function)
             except Exception as e:
-                logger.error("An error occured during model inference: %s.", e)
+                logger.error("An error occured during model inference: %s", e)
 
                 if chat_history:
                     chat_history.pop()

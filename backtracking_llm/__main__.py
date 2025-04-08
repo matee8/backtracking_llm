@@ -24,18 +24,17 @@ def _parse_arguments() -> argparse.Namespace:
 
     parser.add_argument("--model", type=str, help="Model name to use")
 
-    parser.add_argument(
-        "--max-answer-length",
-        type=int,
-        default=DEFAULT_MAX_LENGTH,
-        help="Maximum number of tokens to generate for each answer "
-        "(default: %(default)s)")
+    parser.add_argument("--max-answer-length",
+                        type=int,
+                        default=DEFAULT_MAX_LENGTH,
+                        help="Maximum number of tokens to generate for each "
+                        " answer (default: %(default)s)")
 
-    parser.add_argument(
-        "--top-k",
-        type=int,
-        default=DEFAULT_TOP_K,
-        help="Number of top tokens to analyze (default: %(default)s)")
+    parser.add_argument("--top-k",
+                        type=int,
+                        default=DEFAULT_TOP_K,
+                        help="Number of top tokens to analyze (default: "
+                        "%(default)s)")
 
     parser.add_argument("--verbose",
                         action="store_true",
@@ -52,12 +51,11 @@ def _parse_arguments() -> argparse.Namespace:
                         help="Check for backtracking every N generated tokens."
                         " (default: %(default)s)")
 
-    parser.add_argument(
-        "--probability-threshold",
-        type=float,
-        default=DEFAULT_PROBABILITY_THRESHOLD,
-        help="Probability threshold for the simple backtracking"
-        "decision function (default: %(default)s)")
+    parser.add_argument("--probability-threshold",
+                        type=float,
+                        default=DEFAULT_PROBABILITY_THRESHOLD,
+                        help="Probability threshold for the simple backtracking"
+                        "decision function (default: %(default)s)")
 
     return parser.parse_args()
 

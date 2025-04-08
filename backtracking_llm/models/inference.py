@@ -45,11 +45,10 @@ def load_model_and_tokenizer(
                      exc_info=True)
         raise
     except Exception as e:
-        logger.error(
-            "An unexpected error occured while loading model '%s': %s",
-            model_name,
-            e,
-            exc_info=True)
+        logger.error("An unexpected error occured while loading model '%s': %s",
+                     model_name,
+                     e,
+                     exc_info=True)
         raise
 
 
@@ -84,16 +83,14 @@ def run_inference_loop(
         current_input_ids: torch.Tensor = input_ids
 
         for step in range(max_answer_length):
-            next_token_stats: typing.Optional[ \
-                typing.Dict[
-                    str, \
-                    typing.Union[torch.Tensor, PastKeyValuesType] \
-                ] \
-            ] = _predict_next_token(model=model,
-                                    input_ids=current_input_ids,
-                                    top_k=top_k,
-                                    past_key_values=past_key_values,
-                                    logger=logger)
+            next_token_stats: typing.Optional[typing.Dict[str, typing.Union[
+                torch.Tensor, PastKeyValuesType]]] = _predict_next_token(
+                    model=model,
+                    input_ids=current_input_ids,
+                    top_k=top_k,
+                    past_key_values=past_key_values,
+                    logger=logger,
+                )
 
             if next_token_stats is None:
                 logger.error("Prediction failed at step %d. Stopping.", step)
@@ -104,18 +101,18 @@ def run_inference_loop(
 
             top_k_logits: torch.Tensor = next_token_stats["logits"]
             top_k_indices: torch.Tensor = next_token_stats["indices"]
-            past_key_values: PastKeyValuesType = \
-                next_token_stats["past_key_values"]
+            past_key_values: PastKeyValuesType = (
+                next_token_stats["past_key_values"])
 
             top_k_logits_seq: torch.Tensor = top_k_logits[0]
             top_k_indices_seq: torch.Tensor = top_k_indices[0]
 
-            sample_result: typing.Optional[ \
-                typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor] \
-            ] = _sample_next_token(top_k_logits_seq=top_k_logits_seq,
-                                   top_k_indices_seq=top_k_indices_seq,
-                                   temperature=temperature,
-                                   logger=logger)
+            sample_result: typing.Optional[typing.Tuple[
+                torch.Tensor, torch.Tensor, torch.Tensor]] = _sample_next_token(
+                    top_k_logits_seq=top_k_logits_seq,
+                    top_k_indices_seq=top_k_indices_seq,
+                    temperature=temperature,
+                    logger=logger)
             if sample_result is None:
                 logger.error("Sampling failed at step %d. Stopping", step)
                 return generated_ids
@@ -123,8 +120,8 @@ def run_inference_loop(
             chosen_token_id: torch.Tensor
             chosen_token_relative_idx: torch.Tensor
             probabilities: torch.Tensor
-            chosen_token_id, chosen_token_relative_idx, probabilities \
-                = sample_result
+            chosen_token_id, chosen_token_relative_idx, probabilities = (
+                sample_result)
 
             _log_generation_details(
                 step=step,
@@ -135,19 +132,18 @@ def run_inference_loop(
                 chosen_token_relative_idx=chosen_token_relative_idx,
                 logger=logger)
 
-
-            if backtracking_decision_function is not None and \
-                 (step + 1) % backtrack_every_n == 0:
-                backtrack_result: typing.Optional[torch.Tensor] = \
-                _handle_backtracking(generated_ids=generated_ids,
-                                     prompt_length=prompt_length,
-                                     backtracking_decision_function=
-                                     backtracking_decision_function,
-                                     top_k_logits_seq=top_k_logits_seq,
-                                     probabilities=probabilities,
-                                     chosen_token_relative_idx=
-                                     chosen_token_relative_idx,
-                                     logger=logger)
+            if (backtracking_decision_function is not None and
+                (step + 1) % backtrack_every_n == 0):
+                backtrack_result: typing.Optional[torch.Tensor] = (
+                    _handle_backtracking(
+                        generated_ids=generated_ids,
+                        prompt_length=prompt_length,
+                        backtracking_decision_function=
+                        backtracking_decision_function,
+                        top_k_logits_seq=top_k_logits_seq,
+                        probabilities=probabilities,
+                        chosen_token_relative_idx=chosen_token_relative_idx,
+                        logger=logger))
 
                 if backtrack_result is not None:
                     generated_ids = backtrack_result
@@ -155,8 +151,8 @@ def run_inference_loop(
                     past_key_values = None
                     continue
 
-            if tokenizer.eos_token_id is not None and chosen_token_id.item(
-            ) == tokenizer.eos_token_id:
+            if (tokenizer.eos_token_id is not None and
+                    chosen_token_id.item() == tokenizer.eos_token_id):
                 logging.debug(
                     "EOS token detected at step %d. Stopping inference.",
                     step + 1)
@@ -169,8 +165,8 @@ def run_inference_loop(
         return generated_ids
     except KeyboardInterrupt:
         logging.warning("Inference interrupted by user.")
-        if "generated_ids" in locals() and generated_ids.numel(
-        ) > input_ids.numel():
+        if ("generated_ids" in locals() and
+                generated_ids.numel() > input_ids.numel()):
             return generated_ids
         else:
             return None
@@ -182,8 +178,8 @@ def run_inference_loop(
             "An unexpected error occured during the inference loop: %s",
             e,
             exc_info=True)
-        if "generated_ids" in locals(
-        ) and generated_ids.shape[1] > prompt_length:
+        if ("generated_ids" in locals() and
+                generated_ids.shape[1] > prompt_length):
             logger.warning(
                 "Attempting to return partially generated sequence after error."
             )
@@ -211,10 +207,9 @@ def _setup_device(device_str: typing.Optional[str],
     return selected_device
 
 
-def _prepare_input_ids(
-        prompt: typing.Union[str, torch.Tensor],
-        tokenizer: transformers.PreTrainedTokenizer,
-        logger: logging.Logger) -> typing.Optional[torch.Tensor]:
+def _prepare_input_ids(prompt: typing.Union[str, torch.Tensor],
+                       tokenizer: transformers.PreTrainedTokenizer,
+                       logger: logging.Logger) -> typing.Optional[torch.Tensor]:
     try:
         if isinstance(prompt, str):
             try:
@@ -277,11 +272,10 @@ def _predict_next_token(
                 "past_key_values": updated_past_key_values
             }
     except (RuntimeError, ValueError, IndexError) as e:
-        logger.error(
-            "Error during next token prediction (input shape: %s): %s",
-            input_ids.shape,
-            e,
-            exc_info=True)
+        logger.error("Error during next token prediction (input shape: %s): %s",
+                     input_ids.shape,
+                     e,
+                     exc_info=True)
         return None
     except Exception as e:
         logger.error(
@@ -312,8 +306,7 @@ def _sample_next_token(
     if temperature == 0.:
         probabilities: torch.Tensor = F.softmax(top_k_logits_seq, dim=-1)
 
-        chosen_token_relative_idx: torch.Tensor = torch.argmax(
-            top_k_logits_seq)
+        chosen_token_relative_idx: torch.Tensor = torch.argmax(top_k_logits_seq)
     else:
         probabilities: torch.Tensor = F.softmax(top_k_logits_seq / temperature,
                                                 dim=-1)
@@ -376,14 +369,12 @@ def _calculate_statistics(
                          f"{top_k_logits.shape}, {top_k_probabilities.shape}.")
 
     if top_k_logits.numel() == 0 or top_k_probabilities.numel() == 0:
-        raise ValueError(
-            "Cannot calculate statistics on empty logit or probability tensors."
-        )
+        raise ValueError("Cannot calculate statistics on empty logit or "
+                         "probability tensors.")
 
     if top_k_logits.shape != top_k_probabilities.shape:
-        raise ValueError(
-            f"Logits shape {top_k_logits.shape} must match probabilites "
-            f"shape {top_k_probabilities.shape}.")
+        raise ValueError(f"Logits shape {top_k_logits.shape} must match "
+                         f"probabilites shape {top_k_probabilities.shape}.")
 
     top_logit_value = top_k_logits[0].item()
 
@@ -443,17 +434,16 @@ def _handle_backtracking(
             should_backtrack, num_to_remove = backtracking_decision_function(
                 top_k_logits_seq, probabilities, chosen_token_relative_idx)
         except Exception as e:
-            logger.error(
-                "Error calling the decision function at the %d. token: %s",
-                num_generated_tokens + 1,
-                e,
-                exc_info=True)
+            logger.error("Error calling the decision function at the %d. ",
+                         "token: %s",
+                         num_generated_tokens + 1,
+                         e,
+                         exc_info=True)
             should_backtrack = False
             num_to_remove = 0
 
         if should_backtrack:
-            actual_num_to_remove: int = min(num_to_remove,
-                                            num_generated_tokens)
+            actual_num_to_remove: int = min(num_to_remove, num_generated_tokens)
 
             logger.debug(
                 "Backtracking triggered at the %d. token. Removing %d "

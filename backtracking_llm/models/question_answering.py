@@ -11,11 +11,11 @@ from backtracking_llm.models import inference
 
 
 def run_qa_loop(
-    model: transformers.PreTrainedModel,
-    tokenizer: transformers.PreTrainedTokenizer, logger: logging.Logger,
-    max_length_per_turn: int, temperature: float, top_k: int,
-    backtrack_every_n: int,
-    backtracking_decision_function: typing.Optional[functools.partial]
+        model: transformers.PreTrainedModel,
+        tokenizer: transformers.PreTrainedTokenizer, logger: logging.Logger,
+        max_length_per_turn: int, temperature: float, top_k: int,
+        backtrack_every_n: int,
+        backtracking_decision_function: typing.Optional[functools.partial]
 ) -> None:
     logger.info("Starting interactive Question-Answering session.")
     logger.info("Model: %s", model.name_or_path)
@@ -115,8 +115,8 @@ def _prepare_prompt_ids(
         formatted_prompt_ids = tokenizer.apply_chat_template(
             chat_history, add_generation_prompt=True, return_tensors="pt")
 
-        if not isinstance(formatted_prompt_ids,torch.Tensor) or \
-            formatted_prompt_ids.numel() == 0:
+        if (not isinstance(formatted_prompt_ids, torch.Tensor) or
+                formatted_prompt_ids.numel() == 0):
             logger.error("Failed to apply chat template. Check tokenizer "
                          "configuration.")
             return None

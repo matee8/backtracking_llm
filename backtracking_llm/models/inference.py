@@ -7,8 +7,6 @@ import torch.nn.functional as F
 import transformers
 from transformers import modeling_outputs
 
-PastKeyValuesType = typing.Optional[typing.Tuple[typing.Tuple[torch.Tensor]]]
-
 
 def load_model_and_tokenizer(
     model_name: str, logger: logging.Logger
@@ -79,12 +77,13 @@ def run_inference_loop(
 
         generated_ids: torch.Tensor = input_ids
         prompt_length: int = input_ids.shape[1]
-        past_key_values: PastKeyValuesType = None
+        past_key_values: typing.Optional[transformers.DynamicCache] = None
         current_input_ids: torch.Tensor = input_ids
 
         for step in range(max_answer_length):
             next_token_stats: typing.Optional[typing.Dict[str, typing.Union[
-                torch.Tensor, PastKeyValuesType]]] = _predict_next_token(
+                torch.Tensor, typing.
+                Optional[transformers.DynamicCache]]]] = _predict_next_token(
                     model=model,
                     input_ids=current_input_ids,
                     top_k=top_k,
@@ -101,7 +100,7 @@ def run_inference_loop(
 
             top_k_logits: torch.Tensor = next_token_stats["logits"]
             top_k_indices: torch.Tensor = next_token_stats["indices"]
-            past_key_values: PastKeyValuesType = (
+            past_key_values: typing.Optional[transformers.DynamicCache] = (
                 next_token_stats["past_key_values"])
 
             top_k_logits_seq: torch.Tensor = top_k_logits[0]
@@ -134,7 +133,9 @@ def run_inference_loop(
 
             if (backtracking_decision_function is not None and
                 (step + 1) % backtrack_every_n == 0):
-                backtrack_result: typing.Optional[torch.Tensor] = (
+                backtrack_ids_result: typing.Optional[torch.Tensor]
+                num_tokens_removed: int
+                backtrack_ids_result, num_tokens_removed = (
                     _handle_backtracking(
                         generated_ids=generated_ids,
                         prompt_length=prompt_length,
@@ -145,10 +146,23 @@ def run_inference_loop(
                         chosen_token_relative_idx=chosen_token_relative_idx,
                         logger=logger))
 
-                if backtrack_result is not None:
-                    generated_ids = backtrack_result
-                    current_input_ids = generated_ids
-                    past_key_values = None
+                if num_tokens_removed > 0:
+                    logger.info("Backtracking: %d token(s) removed.",
+                                num_tokens_removed)
+
+                    past_key_values = _trim_past_key_values(
+                        past_key_values, num_tokens_removed, logger)
+
+                    if backtrack_ids_result is not None:
+                        generated_ids = backtrack_ids_result
+
+                    if generated_ids.shape[1] > 0:
+                        current_input_ids = generated_ids[:, -1:]
+                    else:
+                        logger.error("Backtracking removed all tokens, "
+                                     "including prompt. Stopping.")
+                        return None
+
                     continue
 
             if (tokenizer.eos_token_id is not None and
@@ -243,9 +257,10 @@ def _prepare_input_ids(prompt: typing.Union[str, torch.Tensor],
 
 def _predict_next_token(
     model: transformers.PreTrainedModel, input_ids: torch.Tensor, top_k: int,
-    past_key_values: PastKeyValuesType, logger: logging.Logger
-) -> typing.Optional[typing.Dict[str, typing.Union[torch.Tensor,
-                                                   PastKeyValuesType]]]:
+    past_key_values: typing.Optional[transformers.DynamicCache],
+    logger: logging.Logger
+) -> typing.Optional[typing.Dict[str, typing.Union[
+        torch.Tensor, typing.Optional[transformers.DynamicCache]]]]:
     try:
         model.eval()
 
@@ -260,7 +275,15 @@ def _predict_next_token(
                 past_key_values=past_key_values,
                 use_cache=True)
             next_token_logits: torch.Tensor = outputs.logits[:, -1, :]
-            updated_past_key_values: PastKeyValuesType = outputs.past_key_values
+            updated_past_key_values: typing.Optional[typing.Tuple[typing.Tuple[
+                torch.Tensor, ...], ...]] = outputs.past_key_values
+
+            updated_cache: typing.Optional[transformers.DynamicCache]
+            if updated_past_key_values is not None:
+                updated_cache = transformers.DynamicCache(
+                    updated_past_key_values)
+            else:
+                updated_cache = None
 
             top_k_logits: torch.Tensor
             top_k_indices: torch.Tensor
@@ -269,7 +292,7 @@ def _predict_next_token(
             return {
                 "logits": top_k_logits,
                 "indices": top_k_indices,
-                "past_key_values": updated_past_key_values
+                "past_key_values": updated_cache
             }
     except (RuntimeError, ValueError, IndexError) as e:
         logger.error("Error during next token prediction (input shape: %s): %s",
@@ -422,8 +445,8 @@ def _handle_backtracking(
         generated_ids: torch.Tensor, prompt_length: int,
         backtracking_decision_function: functools.partial,
         top_k_logits_seq: torch.Tensor, probabilities: torch.Tensor,
-        chosen_token_relative_idx: torch.Tensor,
-        logger: logging.Logger) -> typing.Optional[torch.Tensor]:
+        chosen_token_relative_idx: torch.Tensor, logger: logging.Logger
+) -> typing.Tuple[typing.Optional[torch.Tensor], int]:
     num_generated_tokens: int = generated_ids.shape[1] - prompt_length
     if num_generated_tokens > 0:
         logger.debug("Calling backtrack decision function at the %d. token.",
@@ -449,9 +472,74 @@ def _handle_backtracking(
                 "Backtracking triggered at the %d. token. Removing %d "
                 "token(s).", num_generated_tokens + 1, actual_num_to_remove)
 
+            if actual_num_to_remove <= 0:
+                logger.debug(
+                    "Backtracking triggered but actual_num_to_remove "
+                    "is %d. No changes made.", actual_num_to_remove)
+                return None, 0
+
             if actual_num_to_remove > 1:
                 generated_ids = generated_ids[:, :-(actual_num_to_remove - 1)]
 
-            return generated_ids
+            return generated_ids, actual_num_to_remove
         else:
-            return None
+            return None, 0
+    else:
+        return None, 0
+
+
+def _trim_past_key_values(
+        past_key_values: typing.Optional[transformers.DynamicCache],
+        num_to_remove: int,
+        logger: logging.Logger) -> typing.Optional[transformers.DynamicCache]:
+    if past_key_values is None:
+        logger.warning("Attempted to trim a None past_key_values cache.")
+        return None
+
+    if num_to_remove <= 0:
+        logger.debug(
+            "Trimming requested with num_to_remove=%d. No changes"
+            " needed.", num_to_remove)
+        return past_key_values
+
+    print(len(past_key_values[0]))
+
+    try:
+        new_past: typing.List[typing.Tuple[torch.Tensor, ...]] = []
+        for layer_past in past_key_values:
+            new_layer_past: typing.List[torch.Tensor] = []
+            for state_tensor in layer_past:
+                if state_tensor.dim() < 2:
+                    logger.error(
+                        "Cannot trim state tensor with dimension < 2."
+                        " Shape: %s", state_tensor.shape)
+                    return None
+
+                current_seq_len: int = state_tensor.shape[-2]
+
+                if num_to_remove > current_seq_len:
+                    logger.warning(
+                        "Attempting to remove %d tokens, but cache "
+                        "sequence length is only %d. Removing all.",
+                        num_to_remove, current_seq_len)
+                    return None
+
+                new_seq_len: int = current_seq_len - num_to_remove
+
+                trimmed_state: torch.Tensor = state_tensor[..., :new_seq_len, :]
+                new_layer_past.append(trimmed_state)
+            new_past.append(tuple(new_layer_past))
+
+        return transformers.DynamicCache(new_past)
+    except (IndexError, ValueError, TypeError) as e:
+        logger.error(
+            "Failed to trim past_key_values. Cache structure might be "
+            "unexpected. Resetting cache. Reason: %s.",
+            e,
+            exc_info=True)
+        return None
+    except Exception as e:
+        logger.critical("Unexpected error during past_key_values trimming: %s",
+                        e,
+                        exc_info=True)
+        return None

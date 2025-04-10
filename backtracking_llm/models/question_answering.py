@@ -72,6 +72,14 @@ def run_qa_loop(
 
                 continue
 
+            if generated_ids is None:
+                logger.error("The model did not generate any answer.")
+
+                if chat_history:
+                    chat_history.pop()
+
+                continue
+
             answer_text = _process_model_output(
                 generated_ids=generated_ids,
                 num_prompt_tokens=num_prompt_tokens,

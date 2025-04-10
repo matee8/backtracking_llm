@@ -64,7 +64,7 @@ def run_inference_loop(
         device: typing.Optional[str] = None) -> typing.Optional[torch.Tensor]:
     try:
         selected_device: torch.device = _setup_device(device, logger)
-        model.to(selected_device)
+        model.to(selected_device)  # type: ignore
         model.eval()
 
         input_ids: typing.Optional[torch.Tensor] = _prepare_input_ids(
@@ -81,9 +81,9 @@ def run_inference_loop(
         current_input_ids: torch.Tensor = input_ids
 
         for step in range(max_answer_length):
-            next_token_stats: typing.Optional[typing.Dict[str, typing.Union[
-                torch.Tensor, typing.
-                Optional[transformers.DynamicCache]]]] = _predict_next_token(
+            next_token_stats: typing.Optional[typing.Tuple[
+                torch.Tensor, torch.Tensor, typing.
+                Optional[transformers.DynamicCache]]] = _predict_next_token(
                     model=model,
                     input_ids=current_input_ids,
                     top_k=top_k,
@@ -98,10 +98,10 @@ def run_inference_loop(
                 else:
                     return None
 
-            top_k_logits: torch.Tensor = next_token_stats["logits"]
-            top_k_indices: torch.Tensor = next_token_stats["indices"]
+            top_k_logits: torch.Tensor = next_token_stats[0]
+            top_k_indices: torch.Tensor = next_token_stats[1]
             past_key_values: typing.Optional[transformers.DynamicCache] = (
-                next_token_stats["past_key_values"])
+                next_token_stats[2])
 
             top_k_logits_seq: torch.Tensor = top_k_logits[0]
             top_k_indices_seq: torch.Tensor = top_k_indices[0]
@@ -259,8 +259,8 @@ def _predict_next_token(
     model: transformers.PreTrainedModel, input_ids: torch.Tensor, top_k: int,
     past_key_values: typing.Optional[transformers.DynamicCache],
     logger: logging.Logger
-) -> typing.Optional[typing.Dict[str, typing.Union[
-        torch.Tensor, typing.Optional[transformers.DynamicCache]]]]:
+) -> typing.Optional[typing.Tuple[torch.Tensor, torch.Tensor,
+                                  typing.Optional[transformers.DynamicCache]]]:
     try:
         model.eval()
 
@@ -289,11 +289,7 @@ def _predict_next_token(
             top_k_indices: torch.Tensor
             top_k_logits, top_k_indices = torch.topk(next_token_logits, top_k)
 
-            return {
-                "logits": top_k_logits,
-                "indices": top_k_indices,
-                "past_key_values": updated_cache
-            }
+            return top_k_logits, top_k_indices, updated_cache
     except (RuntimeError, ValueError, IndexError) as e:
         logger.error("Error during next token prediction (input shape: %s): %s",
                      input_ids.shape,
@@ -501,8 +497,6 @@ def _trim_past_key_values(
             "Trimming requested with num_to_remove=%d. No changes"
             " needed.", num_to_remove)
         return past_key_values
-
-    print(len(past_key_values[0]))
 
     try:
         new_past: typing.List[typing.Tuple[torch.Tensor, ...]] = []

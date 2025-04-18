@@ -6,8 +6,6 @@ import logging
 import typing
 import sys
 
-import transformers
-
 from backtracking_llm.models import decision, inference, question_answering
 
 DEFAULT_MAX_LENGTH: typing.Final[int] = 100
@@ -68,11 +66,11 @@ def _parse_arguments() -> argparse.Namespace:
 
 def _setup_logging(verbose: bool = False) -> logging.Logger:
     if verbose:
-        log_level: int = logging.DEBUG
+        log_level = logging.DEBUG
     else:
-        log_level: int = logging.INFO
+        log_level = logging.INFO
 
-    log_format: str = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
+    log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
 
     logging.basicConfig(level=log_level,
                         format=log_format,
@@ -83,12 +81,10 @@ def _setup_logging(verbose: bool = False) -> logging.Logger:
 
 
 def _main() -> None:
-    args: argparse.Namespace = _parse_arguments()
-    logger: logging.Logger = _setup_logging(args.verbose)
+    args = _parse_arguments()
+    logger = _setup_logging(args.verbose)
 
     try:
-        model: transformers.PreTrainedModel
-        tokenizer: transformers.PreTrainedTokenizer
         model, tokenizer = inference.load_model_and_tokenizer(
             args.model, logger)
     except Exception:
@@ -96,11 +92,11 @@ def _main() -> None:
                         " an internet connection if needed.")
         sys.exit(1)
 
-    decision_function_config: typing.Dict[str, typing.Any] = {
+    decision_function_config = {
         "probability_threshold": args.probability_threshold,
     }
 
-    configured_decision_func: functools.partial = functools.partial(
+    configured_decision_func = functools.partial(
         decision.simple_threshold_decision, config=decision_function_config)
 
     question_answering.run_qa_loop(

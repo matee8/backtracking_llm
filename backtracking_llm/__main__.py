@@ -10,11 +10,11 @@ import transformers
 
 from backtracking_llm.models import decision, inference, question_answering
 
-DEFAULT_MAX_LENGTH = 100
-DEFAULT_TOP_K = 50
-DEFAULT_TEMPERATURE = 1.
-DEFAULT_BACKTRACK_EVERY_N = 5
-DEFAULT_PROBABILITY_THRESHOLD = .5
+DEFAULT_MAX_LENGTH: typing.Final[int] = 100
+DEFAULT_TOP_K: typing.Final[int] = 50
+DEFAULT_TEMPERATURE: typing.Final[float] = 1.
+DEFAULT_BACKTRACK_EVERY_N: typing.Final[int] = 5
+DEFAULT_PROBABILITY_THRESHOLD: typing.Final[float] = .5
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -51,11 +51,12 @@ def _parse_arguments() -> argparse.Namespace:
                         help="Check for backtracking every N generated tokens."
                         " (default: %(default)s)")
 
-    parser.add_argument("--probability-threshold",
-                        type=float,
-                        default=DEFAULT_PROBABILITY_THRESHOLD,
-                        help="Probability threshold for the simple backtracking"
-                        "decision function (default: %(default)s)")
+    parser.add_argument(
+        "--probability-threshold",
+        type=float,
+        default=DEFAULT_PROBABILITY_THRESHOLD,
+        help="Probability threshold for the simple backtracking"
+        "decision function (default: %(default)s)")
 
     return parser.parse_args()
 

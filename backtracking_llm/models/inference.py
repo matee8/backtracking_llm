@@ -62,33 +62,30 @@ def run_inference_loop(model: transformers.PreTrainedModel,
                        | None = None,
                        device: str | None = None) -> torch.Tensor | None:
     try:
-        selected_device: torch.device = _setup_device(device, logger)
+        selected_device = _setup_device(device, logger)
         model.to(selected_device)  # type: ignore
         model.eval()
 
-        input_ids: torch.Tensor | None = _prepare_input_ids(
-            prompt, tokenizer, logger)
+        input_ids = _prepare_input_ids(prompt, tokenizer, logger)
 
         if input_ids is None:
             return None
 
         input_ids.to(selected_device)
 
-        generated_ids: torch.Tensor = input_ids
-        prompt_length: int = input_ids.shape[1]
-        past_key_values: transformers.DynamicCache | None = None
-        current_input_ids: torch.Tensor = input_ids
+        generated_ids = input_ids
+        prompt_length = input_ids.shape[1]
+        past_key_values = None
+        current_input_ids = input_ids
 
         for step in range(max_answer_length):
-            next_token_stats: tuple[torch.Tensor, torch.Tensor,
-                                    transformers.DynamicCache
-                                    | None] | None = _predict_next_token(
-                                        model=model,
-                                        input_ids=current_input_ids,
-                                        top_k=top_k,
-                                        past_key_values=past_key_values,
-                                        logger=logger,
-                                    )
+            next_token_stats = _predict_next_token(
+                model=model,
+                input_ids=current_input_ids,
+                top_k=top_k,
+                past_key_values=past_key_values,
+                logger=logger,
+            )
 
             if next_token_stats is None:
                 logger.error("Prediction failed at step %d. Stopping.", step)
@@ -97,27 +94,22 @@ def run_inference_loop(model: transformers.PreTrainedModel,
                 else:
                     return None
 
-            top_k_logits: torch.Tensor = next_token_stats[0]
-            top_k_indices: torch.Tensor = next_token_stats[1]
-            past_key_values: transformers.DynamicCache | None = (
-                next_token_stats[2])
+            top_k_logits = next_token_stats[0]
+            top_k_indices = next_token_stats[1]
+            past_key_values = next_token_stats[2]
 
-            top_k_logits_seq: torch.Tensor = top_k_logits[0]
-            top_k_indices_seq: torch.Tensor = top_k_indices[0]
+            top_k_logits_seq = top_k_logits[0]
+            top_k_indices_seq = top_k_indices[0]
 
-            sample_result: tuple[torch.Tensor, torch.Tensor,
-                                 torch.Tensor] | None = _sample_next_token(
-                                     top_k_logits_seq=top_k_logits_seq,
-                                     top_k_indices_seq=top_k_indices_seq,
-                                     temperature=temperature,
-                                     logger=logger)
+            sample_result = _sample_next_token(
+                top_k_logits_seq=top_k_logits_seq,
+                top_k_indices_seq=top_k_indices_seq,
+                temperature=temperature,
+                logger=logger)
             if sample_result is None:
                 logger.error("Sampling failed at step %d. Stopping", step)
                 return generated_ids
 
-            chosen_token_id: torch.Tensor
-            chosen_token_relative_idx: torch.Tensor
-            probabilities: torch.Tensor
             chosen_token_id, chosen_token_relative_idx, probabilities = (
                 sample_result)
 
@@ -132,8 +124,6 @@ def run_inference_loop(model: transformers.PreTrainedModel,
 
             if (backtracking_decision_function is not None
                     and (step + 1) % backtrack_every_n == 0):
-                backtrack_ids_result: torch.Tensor | None
-                num_tokens_removed: int
                 backtrack_ids_result, num_tokens_removed = (
                     _handle_backtracking(
                         generated_ids=generated_ids,
@@ -171,7 +161,7 @@ def run_inference_loop(model: transformers.PreTrainedModel,
                     step + 1)
                 break
 
-            generated_ids: torch.Tensor = torch.cat(
+            generated_ids = torch.cat(
                 [generated_ids, chosen_token_id.view(1, 1)], dim=-1)
             current_input_ids = chosen_token_id.view(1, 1)
 
@@ -208,7 +198,7 @@ def _setup_device(device_str: str | None,
                          device_str)
             raise RuntimeError("CUDA not available for specified device"
                                f"{device_str}.")
-        selected_device: torch.device = torch.device(device_str)
+        selected_device = torch.device(device_str)
         logger.info("Using specified device: %s.", selected_device)
     elif torch.cuda.is_available():
         selected_device: torch.device = torch.device("cuda")
@@ -235,7 +225,7 @@ def _prepare_input_ids(prompt: typing.Union[str, torch.Tensor],
                              exc_info=True)
                 raise
         else:
-            input_ids: torch.Tensor = prompt
+            input_ids = prompt
 
         if not isinstance(input_ids, torch.Tensor):
             logger.error("Tokenizer did not return a Tensor.")
@@ -273,18 +263,14 @@ def _predict_next_token(
                 past_key_values=past_key_values,
                 use_cache=True)
             next_token_logits: torch.Tensor = outputs.logits[:, -1, :]
-            updated_past_key_values: tuple[tuple[
-                torch.Tensor, ...], ...] | None = outputs.past_key_values
+            updated_past_key_values = outputs.past_key_values
 
-            updated_cache: transformers.DynamicCache | None
             if updated_past_key_values is not None:
                 updated_cache = transformers.DynamicCache(
                     updated_past_key_values)
             else:
                 updated_cache = None
 
-            top_k_logits: torch.Tensor
-            top_k_indices: torch.Tensor
             top_k_logits, top_k_indices = torch.topk(next_token_logits, top_k)
 
             return top_k_logits, top_k_indices, updated_cache
@@ -322,16 +308,14 @@ def _sample_next_token(
         return None
 
     if temperature == 0.:
-        probabilities: torch.Tensor = F.softmax(top_k_logits_seq, dim=-1)
+        probabilities = F.softmax(top_k_logits_seq, dim=-1)
 
-        chosen_token_relative_idx: torch.Tensor = torch.argmax(
-            top_k_logits_seq)
+        chosen_token_relative_idx = torch.argmax(top_k_logits_seq)
     else:
-        probabilities: torch.Tensor = F.softmax(top_k_logits_seq / temperature,
-                                                dim=-1)
+        probabilities = F.softmax(top_k_logits_seq / temperature, dim=-1)
 
         try:
-            chosen_token_relative_idx: torch.Tensor = torch.multinomial(
+            chosen_token_relative_idx = torch.multinomial(
                 probabilities, num_samples=1).squeeze()
         except RuntimeError as e:
             logger.error(
@@ -340,11 +324,9 @@ def _sample_next_token(
                 e,
                 exc_info=True)
 
-            chosen_token_relative_idx: torch.Tensor = torch.argmax(
-                probabilities)
+            chosen_token_relative_idx = torch.argmax(probabilities)
 
-    chosen_token_id: torch.Tensor = top_k_indices_seq[
-        chosen_token_relative_idx].unsqueeze(0)
+    chosen_token_id = top_k_indices_seq[chosen_token_relative_idx].unsqueeze(0)
 
     return chosen_token_id, chosen_token_relative_idx, probabilities
 
@@ -362,9 +344,7 @@ def _log_generation_details(step: int,
     logger.debug("Iteration %d.", step)
 
     try:
-        stats: dict[str,
-                    float] = _calculate_statistics(top_k_logits_seq,
-                                                   probabilities)
+        stats = _calculate_statistics(top_k_logits_seq, probabilities)
 
         for key, value in stats.items():
             logging.debug("%s: %.4f.", key, value)
@@ -444,7 +424,7 @@ def _handle_backtracking(
         top_k_logits_seq: torch.Tensor, probabilities: torch.Tensor,
         chosen_token_relative_idx: torch.Tensor,
         logger: logging.Logger) -> tuple[torch.Tensor | None, int]:
-    num_generated_tokens: int = generated_ids.shape[1] - prompt_length
+    num_generated_tokens = generated_ids.shape[1] - prompt_length
     if num_generated_tokens > 0:
         logger.debug("Calling backtrack decision function at the %d. token.",
                      num_generated_tokens + 1)
@@ -463,8 +443,7 @@ def _handle_backtracking(
             num_to_remove = 0
 
         if should_backtrack:
-            actual_num_to_remove: int = min(num_to_remove,
-                                            num_generated_tokens)
+            actual_num_to_remove = min(num_to_remove, num_generated_tokens)
 
             logger.debug(
                 "Backtracking triggered at the %d. token. Removing %d "
@@ -510,7 +489,7 @@ def _trim_past_key_values(
                         " Shape: %s", state_tensor.shape)
                     return None
 
-                current_seq_len: int = state_tensor.shape[-2]
+                current_seq_len = state_tensor.shape[-2]
 
                 if num_to_remove > current_seq_len:
                     logger.warning(
@@ -519,10 +498,9 @@ def _trim_past_key_values(
                         num_to_remove, current_seq_len)
                     return None
 
-                new_seq_len: int = current_seq_len - num_to_remove
+                new_seq_len = current_seq_len - num_to_remove
 
-                trimmed_state: torch.Tensor = state_tensor[
-                    ..., :new_seq_len, :]
+                trimmed_state = state_tensor[..., :new_seq_len, :]
                 new_layer_past.append(trimmed_state)
             new_past.append(tuple(new_layer_past))
 

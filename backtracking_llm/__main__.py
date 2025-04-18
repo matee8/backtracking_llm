@@ -20,7 +20,8 @@ DEFAULT_PROBABILITY_THRESHOLD: typing.Final[float] = .5
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run inference on any model and analyze token logits "
-        "and probabilites")
+        "and probabilites",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("--model", type=str, help="Model name to use")
 
@@ -28,13 +29,12 @@ def _parse_arguments() -> argparse.Namespace:
                         type=int,
                         default=DEFAULT_MAX_LENGTH,
                         help="Maximum number of tokens to generate for each "
-                        " answer (default: %(default)s)")
+                        " answer")
 
     parser.add_argument("--top-k",
                         type=int,
                         default=DEFAULT_TOP_K,
-                        help="Number of top tokens to analyze (default: "
-                        "%(default)s)")
+                        help="Number of top tokens to analyze")
 
     parser.add_argument("--verbose",
                         action="store_true",
@@ -43,13 +43,13 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument("--temperature",
                         type=float,
                         default=DEFAULT_TEMPERATURE,
-                        help="Sampling temperature (default: %(default)s)")
+                        help="Sampling temperature")
 
-    parser.add_argument("--backtrack-every-n",
-                        type=int,
-                        default=DEFAULT_BACKTRACK_EVERY_N,
-                        help="Check for backtracking every N generated tokens."
-                        " (default: %(default)s)")
+    parser.add_argument(
+        "--backtrack-every-n",
+        type=int,
+        default=DEFAULT_BACKTRACK_EVERY_N,
+        help="Check for backtracking every N generated tokens.")
 
     parser.add_argument(
         "--probability-threshold",

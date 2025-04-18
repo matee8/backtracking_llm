@@ -19,44 +19,49 @@ DEFAULT_PROBABILITY_THRESHOLD: typing.Final[float] = .5
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run inference on any model and analyze token logits "
-        "and probabilites",
+        description="Run inference on any model and use backtracking to remove "
+        "already generated tokens",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument("--model", type=str, help="Model name to use")
+    parser.add_argument("--model",
+                        type=str,
+                        help="id of the pre-trained model "
+                        "hosted on the Hugging Face model hub")
 
     parser.add_argument("--max-answer-length",
                         type=int,
                         default=DEFAULT_MAX_LENGTH,
-                        help="Maximum number of tokens to generate for each "
+                        help="maximum number of tokens to generate for each "
                         " answer")
 
-    parser.add_argument("--top-k",
-                        type=int,
-                        default=DEFAULT_TOP_K,
-                        help="Number of top tokens to analyze")
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=DEFAULT_TOP_K,
+        help="controls the sampling strategy by limiting the "
+        "next token prediction pool to the k most likely tokens")
 
     parser.add_argument("--verbose",
                         action="store_true",
-                        help="Enable verbose logging")
+                        help="enable verbose logging")
 
     parser.add_argument("--temperature",
                         type=float,
                         default=DEFAULT_TEMPERATURE,
-                        help="Sampling temperature")
+                        help="controls the creativity or randomness of the "
+                        "generated text")
 
-    parser.add_argument(
-        "--backtrack-every-n",
-        type=int,
-        default=DEFAULT_BACKTRACK_EVERY_N,
-        help="Check for backtracking every N generated tokens.")
+    parser.add_argument("--backtrack-every-n",
+                        type=int,
+                        default=DEFAULT_BACKTRACK_EVERY_N,
+                        help="check for backtracking every N generated tokens")
 
     parser.add_argument(
         "--probability-threshold",
         type=float,
         default=DEFAULT_PROBABILITY_THRESHOLD,
-        help="Probability threshold for the simple backtracking"
-        "decision function (default: %(default)s)")
+        help="probability threshold for the simple backtracking"
+        "decision function")
 
     return parser.parse_args()
 

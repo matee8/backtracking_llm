@@ -12,9 +12,8 @@ def simple_threshold_decision(
     chosen_token_relative_idx: int,
     config: dict[str, typing.Any],
 ) -> tuple[bool, int]:
-    BACKTRACK_TOKEN_COUNT: int = 1
-    chosen_prob: float = (
-        top_k_probabilites_seq[chosen_token_relative_idx].item())
+    BACKTRACK_TOKEN_COUNT: typing.Final[int] = 1
+    chosen_prob = (top_k_probabilites_seq[chosen_token_relative_idx].item())
 
     if chosen_prob < config["probability_threshold"]:
         return True, BACKTRACK_TOKEN_COUNT

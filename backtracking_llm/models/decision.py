@@ -3,8 +3,7 @@ import typing
 import torch
 
 BacktrackingDecisionFunctionType = typing.Callable[
-    [torch.Tensor, torch.Tensor, int, dict[str, typing.Any]],
-    tuple[bool, int]]
+    [torch.Tensor, torch.Tensor, int, dict[str, typing.Any]], tuple[bool, int]]
 
 
 def simple_threshold_decision(

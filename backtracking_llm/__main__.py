@@ -2,8 +2,11 @@
 
 import argparse
 import logging
+import os
 import typing
 import sys
+
+import platformdirs
 
 from backtracking_llm.models import decision, inference, question_answering
 
@@ -66,10 +69,15 @@ def _parse_arguments() -> argparse.Namespace:
                         default=DEFAULT_DEVICE,
                         help="device which the model inference will run on")
 
+    parser.add_argument("--log-stdout",
+                        action="store_true",
+                        help="wrte logs to stdout instead of file")
+
     return parser.parse_args()
 
 
-def _setup_logging(verbose: bool = False) -> logging.Logger:
+def _setup_logging(verbose: bool = False,
+                   log_stdout: bool = False) -> logging.Logger:
     if verbose:
         log_level = logging.DEBUG
     else:
@@ -77,9 +85,19 @@ def _setup_logging(verbose: bool = False) -> logging.Logger:
 
     log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
 
+    if log_stdout:
+        handler = logging.StreamHandler(sys.stdout)
+    else:
+        log_dir = platformdirs.user_log_dir("backtracking_llm",
+                                            appauthor="matee8")
+        log_filename = "backtracking_llm.log"
+        full_log_path = os.path.join(log_dir, log_filename)
+        os.makedirs(log_dir, exist_ok=True)
+        handler = logging.FileHandler(full_log_path)
+
     logging.basicConfig(level=log_level,
                         format=log_format,
-                        handlers=[logging.StreamHandler(sys.stdout)],
+                        handlers=[handler],
                         force=True)
 
     return logging.getLogger(__name__)
@@ -87,7 +105,7 @@ def _setup_logging(verbose: bool = False) -> logging.Logger:
 
 def _main() -> None:
     args = _parse_arguments()
-    logger = _setup_logging(args.verbose)
+    logger = _setup_logging(args.verbose, args.log_stdout)
 
     inference_config = inference.InferenceConfig(
         max_answer_length=args.max_answer_length,

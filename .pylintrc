@@ -53,6 +53,7 @@ confidence=
 disable=R,
         abstract-method,
         apply-builtin,
+        broad-exception-caught,
         arguments-differ,
         attribute-defined-outside-init,
         backtick,

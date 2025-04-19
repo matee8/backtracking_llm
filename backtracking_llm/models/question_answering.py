@@ -11,12 +11,11 @@ from backtracking_llm.models import inference
 
 
 def run_qa_loop(
-    model: transformers.PreTrainedModel,
-    tokenizer: transformers.PreTrainedTokenizer, logger: logging.Logger,
-    max_length_per_turn: int, temperature: float, top_k: int,
-    backtrack_every_n: int,
-    backtracking_decision_function: typing.Optional[functools.partial]
-) -> None:
+        model: transformers.PreTrainedModel,
+        tokenizer: transformers.PreTrainedTokenizer, logger: logging.Logger,
+        max_length_per_turn: int, temperature: float, top_k: int,
+        backtrack_every_n: int,
+        backtracking_decision_function: functools.partial | None) -> None:
     logger.info("Starting interactive Question-Answering session.")
     logger.info("Model: %s", model.name_or_path)
     logger.info("Max length per turn: %d, Temperature: %.2f, Top-K: %d",
@@ -27,12 +26,12 @@ def run_qa_loop(
         logger.info("Backtracking: disabled.")
     logger.info("Type your questions below, Press Ctrl+C to exit.")
 
-    chat_history: typing.List[typing.Dict[str, str]] = []
+    chat_history: list[dict[str, str]] = []
 
     try:
         while True:
             try:
-                user_input: typing.Optional[str] = _get_user_input(logger)
+                user_input = _get_user_input(logger)
                 if user_input is None:
                     continue
             except (EOFError, KeyboardInterrupt):
@@ -47,20 +46,19 @@ def run_qa_loop(
                 continue
 
             try:
-                num_prompt_tokens: int = formatted_prompt_ids.shape[-1]
+                num_prompt_tokens = formatted_prompt_ids.shape[-1]
 
-                generated_ids: typing.Optional[
-                    torch.Tensor] = inference.run_inference_loop(
-                        model=model,
-                        tokenizer=tokenizer,
-                        prompt=formatted_prompt_ids,
-                        max_answer_length=max_length_per_turn,
-                        top_k=top_k,
-                        logger=logger,
-                        temperature=temperature,
-                        backtrack_every_n=backtrack_every_n,
-                        backtracking_decision_function=
-                        backtracking_decision_function)
+                generated_ids = inference.run_inference_loop(
+                    model=model,
+                    tokenizer=tokenizer,
+                    prompt=formatted_prompt_ids,
+                    max_answer_length=max_length_per_turn,
+                    top_k=top_k,
+                    logger=logger,
+                    temperature=temperature,
+                    backtrack_every_n=backtrack_every_n,
+                    backtracking_decision_function=
+                    backtracking_decision_function)
 
                 if generated_ids is None:
                     chat_history.pop()
@@ -102,12 +100,14 @@ def run_qa_loop(
         logger.info("QA session finished.")
 
 
-def _get_user_input(logger: logging.Logger) -> typing.Optional[str]:
+def _get_user_input(logger: logging.Logger) -> str | None:
     try:
-        user_input: str = input("You: ")
+        user_input = input("You: ")
+
         if not user_input.strip():
             logger.info("Empty input received, skipping turn.")
             return None
+
         return user_input
     except (EOFError, KeyboardInterrupt):
         print("\n")
@@ -115,10 +115,9 @@ def _get_user_input(logger: logging.Logger) -> typing.Optional[str]:
         raise
 
 
-def _prepare_prompt_ids(
-        tokenizer: transformers.PreTrainedTokenizer,
-        chat_history: typing.List[typing.Dict[str, str]],
-        logger: logging.Logger) -> typing.Optional[torch.Tensor]:
+def _prepare_prompt_ids(tokenizer: transformers.PreTrainedTokenizer,
+                        chat_history: list[dict[str, str]],
+                        logger: logging.Logger) -> torch.Tensor | None:
     try:
         formatted_prompt_ids = tokenizer.apply_chat_template(
             chat_history, add_generation_prompt=True, return_tensors="pt")
@@ -136,17 +135,16 @@ def _prepare_prompt_ids(
 
 def _process_model_output(generated_ids: torch.Tensor, num_prompt_tokens: int,
                           tokenizer: transformers.PreTrainedTokenizer,
-                          logger: logging.Logger) -> typing.Optional[str]:
+                          logger: logging.Logger) -> str | None:
     if generated_ids.numel() <= num_prompt_tokens:
         logger.warning("Model did not generate any new tokens.")
         return None
 
-    answer_ids: torch.Tensor = generated_ids[0, num_prompt_tokens:]
+    answer_ids = generated_ids[0, num_prompt_tokens:]
 
     try:
-        answer_text: str = tokenizer.decode(answer_ids,
-                                            skip_special_tokens=True)
-        answer_text = answer_text.strip()
+        answer_text = tokenizer.decode(answer_ids,
+                                       skip_special_tokens=True).strip()
 
         if not answer_text:
             logger.warning("Model generated empty text after decoding.")

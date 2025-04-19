@@ -2,7 +2,6 @@
 
 import functools
 import logging
-import typing
 
 import torch
 import transformers
@@ -10,20 +9,15 @@ import transformers
 from backtracking_llm.models import inference
 
 
-def run_qa_loop(
-        model: transformers.PreTrainedModel,
-        tokenizer: transformers.PreTrainedTokenizer, logger: logging.Logger,
-        max_length_per_turn: int, temperature: float, top_k: int,
-        backtrack_every_n: int,
-        backtracking_decision_function: functools.partial | None) -> None:
+def run_qa_loop(engine: inference.InferenceEngine,
+                tokenizer: transformers.PreTrainedTokenizer,
+                logger: logging.Logger) -> None:
     logger.info("Starting interactive Question-Answering session.")
-    logger.info("Model: %s", model.name_or_path)
+    logger.info("Model: %s", engine.model.name_or_path)
     logger.info("Max length per turn: %d, Temperature: %.2f, Top-K: %d",
-                max_length_per_turn, temperature, top_k)
-    if backtracking_decision_function is not None:
-        logger.info("Backtracking: enabled.")
-    else:
-        logger.info("Backtracking: disabled.")
+                engine.config.max_answer_length, engine.config.temperature,
+                engine.config.top_k)
+    logger.info("Backtracking: enabled.")
     logger.info("Type your questions below, Press Ctrl+C to exit.")
 
     chat_history: list[dict[str, str]] = []
@@ -48,20 +42,18 @@ def run_qa_loop(
             try:
                 num_prompt_tokens = formatted_prompt_ids.shape[-1]
 
-                generated_ids = inference.run_inference_loop(
-                    model=model,
-                    tokenizer=tokenizer,
-                    prompt=formatted_prompt_ids,
-                    max_answer_length=max_length_per_turn,
-                    top_k=top_k,
-                    logger=logger,
-                    temperature=temperature,
-                    backtrack_every_n=backtrack_every_n,
-                    backtracking_decision_function=
-                    backtracking_decision_function)
+                generated_ids: torch.Tensor | None = None
+                try:
+                    generated_ids = engine.generate(
+                        prompt=formatted_prompt_ids)
+                except inference.GenerationError as e:
+                    logger.error(
+                        "An error occurred during model generation: %s", e)
 
-                if generated_ids is None:
-                    chat_history.pop()
+                    if chat_history:
+                        chat_history.pop()
+
+                    continue
             except Exception as e:
                 logger.error("An error occured during model inference: %s", e)
 
@@ -87,7 +79,7 @@ def run_qa_loop(
                 chat_history.pop()
                 continue
 
-            print("\n")
+            print(f"\n{answer_text}")
 
             chat_history.append({"role": "assistant", "content": answer_text})
     except KeyboardInterrupt:

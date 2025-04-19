@@ -2,15 +2,16 @@ import typing
 
 import torch
 
-BacktrackingDecisionFunctionType = typing.Callable[
-    [torch.Tensor, torch.Tensor, int, dict[str, typing.Any]], tuple[bool, int]]
+BacktrackFn = typing.Callable[
+    [dict[str, typing.Any], torch.Tensor, torch.Tensor, torch.Tensor],
+    tuple[bool, int]]
 
 
 def simple_threshold_decision(
+    config: dict[str, typing.Any],
     top_k_logits_seq: torch.Tensor,
     top_k_probabilites_seq: torch.Tensor,
-    chosen_token_relative_idx: int,
-    config: dict[str, typing.Any],
+    chosen_token_relative_idx: torch.Tensor,
 ) -> tuple[bool, int]:
     BACKTRACK_TOKEN_COUNT: typing.Final[int] = 1
     chosen_prob = top_k_probabilites_seq[chosen_token_relative_idx].item()

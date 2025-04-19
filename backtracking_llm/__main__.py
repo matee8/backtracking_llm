@@ -84,30 +84,32 @@ def _main() -> None:
     args = _parse_arguments()
     logger = _setup_logging(args.verbose)
 
+    inference_config = inference.InferenceConfig(
+        max_answer_length=args.max_answer_length,
+        top_k=args.top_k,
+        temperature=args.temperature,
+        backtrack_every_n=args.backtrack_every_n,
+        backtrack_fn=decision.simple_threshold_decision,
+        backtrack_fn_config={
+            "probability_threshold": args.probability_threshold,
+        },
+        device=None)
+
     try:
-        model, tokenizer = inference.load_model_and_tokenizer(
-            args.model, logger)
-    except Exception:
-        logger.critical("Please ensure the model name is correct and you have"
-                        " an internet connection if needed.")
+        engine = inference.InferenceEngine(model_name=args.model,
+                                           logger=logger,
+                                           config=inference_config)
+    except inference.ModelInitializationError as e:
+        logger.critical("Failed to initialize the model or tokenizer: %s", e)
+        logger.critical(
+            "Please ensure the model name ('%s') is correct, "
+            "dependencies are installed, and you have an internet "
+            "connection if needed.", args.model)
         sys.exit(1)
 
-    decision_function_config = {
-        "probability_threshold": args.probability_threshold,
-    }
-
-    configured_decision_func = functools.partial(
-        decision.simple_threshold_decision, config=decision_function_config)
-
-    question_answering.run_qa_loop(
-        model=model,
-        tokenizer=tokenizer,
-        logger=logger,
-        max_length_per_turn=args.max_answer_length,
-        temperature=args.temperature,
-        top_k=args.top_k,
-        backtrack_every_n=args.backtrack_every_n,
-        backtracking_decision_function=configured_decision_func)
+    question_answering.run_qa_loop(engine=engine,
+                                   tokenizer=engine.tokenizer,
+                                   logger=logger)
 
 
 if __name__ == "__main__":

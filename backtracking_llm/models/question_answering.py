@@ -1,149 +1,168 @@
-#!/usr/bin/env python3
-
 import logging
 
 import torch
-import transformers
 
 from backtracking_llm.models import inference
 
 
-def run_qa_loop(engine: inference.InferenceEngine,
-                tokenizer: transformers.PreTrainedTokenizer,
-                logger: logging.Logger) -> None:
-    logger.info("Starting interactive Question-Answering session.")
-    logger.info("Model: %s", engine.model.name_or_path)
-    logger.info("Max length per turn: %d, Temperature: %.2f, Top-K: %d",
-                engine.config.max_answer_length, engine.config.temperature,
-                engine.config.top_k)
-    logger.info("Backtracking: enabled.")
-    logger.info("Type your questions below, Press Ctrl+C to exit.")
+class ChatError(RuntimeError):
+    pass
 
-    chat_history: list[dict[str, str]] = []
 
-    try:
-        while True:
-            try:
-                user_input = _get_user_input(logger)
-                if user_input is None:
-                    continue
-            except (EOFError, KeyboardInterrupt):
-                break
+class ChatSession:
 
-            chat_history.append({"role": "user", "content": user_input})
+    def __init__(self, engine: inference.InferenceEngine,
+                 logger: logging.Logger) -> None:
+        self.engine = engine
+        self.tokenizer = engine.tokenizer
+        self.logger = logger
+        self.chat_history: list[dict[str, str]] = []
 
-            formatted_prompt_ids = _prepare_prompt_ids(tokenizer, chat_history,
-                                                       logger)
-            if formatted_prompt_ids is None:
-                chat_history.pop()
-                continue
+    def run(self) -> None:
+        self.logger.info("Starting interactive Question-Answering session.")
+        self._log_session_info()
 
-            try:
-                num_prompt_tokens = formatted_prompt_ids.shape[-1]
-
-                generated_ids: torch.Tensor | None = None
+        try:
+            while True:
                 try:
-                    generated_ids = engine.generate(
-                        prompt=formatted_prompt_ids)
-                except inference.GenerationError as e:
-                    logger.error(
-                        "An error occurred during model generation: %s", e)
+                    user_input = self._get_user_input()
+                    if user_input is None:
+                        continue
+                except (EOFError, KeyboardInterrupt):
+                    self.logger.info("Input interrupted. Exiting chat loop.")
+                    break
 
-                    if chat_history:
-                        chat_history.pop()
+                self.chat_history.append({
+                    "role": "user",
+                    "content": user_input
+                })
+
+                try:
+                    self._process_conversation_turn()
+                except ChatError as e:
+                    self.logger.error("Failed to process chat turn: %s",
+                                      e,
+                                      exc_info=True)
+
+                    if self.chat_history:
+                        self.chat_history.pop()
 
                     continue
-            except Exception as e:
-                logger.error("An error occured during model inference: %s", e)
+                except inference.GenerationError as e:
+                    self.logger.error("Model generation failed: %s",
+                                      e,
+                                      exc_info=True)
 
-                if chat_history:
-                    chat_history.pop()
+                    if self.chat_history:
+                        self.chat_history.pop()
 
-                continue
+                    continue
+                except Exception as e:
+                    self.logger.error(
+                        "An unexpected error occured during the "
+                        "chat turn: %s",
+                        e,
+                        exc_info=True)
 
-            if generated_ids is None:
-                logger.error("The model did not generate any answer.")
+                    if self.chat_history:
+                        self.chat_history.pop()
 
-                if chat_history:
-                    chat_history.pop()
+                    continue
+        except (KeyboardInterrupt, EOFError):
+            self.logger.info("Chat loop interrupted by keyboard interrupt. "
+                             "Exiting.")
+        except Exception as e:
+            self.logger.error(
+                "An unexpected critical error occured in the main"
+                " chat loop: %s",
+                e,
+                exc_info=True)
+            raise
+        finally:
+            self.logger.info("Chat session finished.")
 
-                continue
+    def _log_session_info(self) -> None:
+        try:
+            model_name = self.engine.model.name_or_path
+        except AttributeError:
+            model_name = "N/A"
 
-            answer_text = _process_model_output(
-                generated_ids=generated_ids,
-                num_prompt_tokens=num_prompt_tokens,
-                tokenizer=tokenizer,
-                logger=logger)
-            if answer_text is None:
-                chat_history.pop()
-                continue
+        self.logger.info("Model: %s", model_name)
+        self.logger.info("Max answer length: %d, Temperature: %.2f, Top-K: %d",
+                         self.engine.config.max_answer_length,
+                         self.engine.config.temperature,
+                         self.engine.config.top_k)
+        self.logger.info("Backtracking: Function: %s, Config: %s",
+                         self.engine.config.backtrack_fn.__name__,
+                         self.engine.config.backtrack_fn_config)
+        self.logger.info("Type your questions below. Press Ctrl+C or Ctrl+D "
+                         "(EOF) to exit.")
 
-            print(f"\n{answer_text}")
+    def _get_user_input(self) -> str | None:
+        try:
+            text = input("You: ")
 
-            chat_history.append({"role": "assistant", "content": answer_text})
-    except KeyboardInterrupt:
-        logger.info("QA loop interrupted by keyboard interrupt. Exiting.")
-    except Exception as e:
-        logger.error("An unexpected error occurred in the QA loop: %s",
-                     e,
-                     exc_info=True)
-    finally:
-        logger.info("QA session finished.")
+            if not text or not text.strip():
+                self.logger.info("Empty input; please type a question.")
+                return None
 
+            return text.strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n", end="")
+            raise
+        except Exception as e:
+            msg = "Error reading user input"
+            self.logger.error("%s: %s", msg, e, exc_info=True)
+            raise ChatError(msg) from e
 
-def _get_user_input(logger: logging.Logger) -> str | None:
-    try:
-        user_input = input("You: ")
+    def _process_conversation_turn(self) -> None:
+        prompt_ids = self._prepare_prompt()
 
-        if not user_input.strip():
-            logger.info("Empty input received, skipping turn.")
-            return None
+        generated_ids = self.engine.generate(prompt_ids)
+        if generated_ids is None:
+            raise ChatError("Model generation did not return valid output.")
 
-        return user_input
-    except (EOFError, KeyboardInterrupt):
-        print("\n")
-        logger.info("Input interrupted.")
-        raise
+        answer = self._process_model_output(generated_ids,
+                                            prompt_ids.shape[-1])
 
+        print(answer)
+        self.chat_history.append({"role": "assistant", "content": answer})
 
-def _prepare_prompt_ids(tokenizer: transformers.PreTrainedTokenizer,
-                        chat_history: list[dict[str, str]],
-                        logger: logging.Logger) -> torch.Tensor | None:
-    try:
-        formatted_prompt_ids = tokenizer.apply_chat_template(
-            chat_history, add_generation_prompt=True, return_tensors="pt")
+    def _prepare_prompt(self) -> torch.Tensor:
+        try:
+            ids = self.tokenizer.apply_chat_template(
+                self.chat_history,
+                add_generation_prompt=True,
+                return_tensors="pt")
 
-        if (not isinstance(formatted_prompt_ids, torch.Tensor)
-                or formatted_prompt_ids.numel() == 0):
-            logger.error("Failed to apply chat template. Check tokenizer "
-                         "configuration.")
-            return None
-        return formatted_prompt_ids
-    except Exception as e:
-        logger.error("Failed to apply chat template: %s", e, exc_info=True)
-        return None
+            if not isinstance(ids, torch.Tensor) or ids.numel() == 0:
+                raise ChatError(
+                    "Applying chat template returned invalid "
+                    "result. Check tokenizer configuration and chat"
+                    " history format.")
 
+            return ids.to(self.engine.device)  # type: ignore[reportReturnType]
+        except Exception as e:
+            msg = "Failed to apply chat template"
+            self.logger.error("%s: %s", msg, e, exc_info=True)
+            raise ChatError(msg) from e
 
-def _process_model_output(generated_ids: torch.Tensor, num_prompt_tokens: int,
-                          tokenizer: transformers.PreTrainedTokenizer,
-                          logger: logging.Logger) -> str | None:
-    if generated_ids.numel() <= num_prompt_tokens:
-        logger.warning("Model did not generate any new tokens.")
-        return None
+    def _process_model_output(self, generated_ids: torch.Tensor,
+                              prompt_len: int) -> str:
+        if generated_ids.numel() <= prompt_len:
+            raise ChatError(
+                "Model generation finished, but no new tokens were "
+                "generated")
 
-    answer_ids = generated_ids[0, num_prompt_tokens:]
+        answer_ids = generated_ids[0, prompt_len:]
+        try:
+            text = (self.tokenizer.decode(answer_ids,
+                                          skip_special_tokens=True).strip())
+        except Exception as e:
+            raise ChatError("Failed to decode the answer tokens") from e
 
-    try:
-        answer_text = tokenizer.decode(answer_ids,
-                                       skip_special_tokens=True).strip()
+        if not text:
+            raise ChatError("Model generated empty or whitespace-only text "
+                            "after decoding.")
 
-        if not answer_text:
-            logger.warning("Model generated empty text after decoding.")
-            return None
-
-        return answer_text
-    except Exception as e:
-        logger.error("Failed to decode or print the answer: %s",
-                     e,
-                     exc_info=True)
-        return None
+        return text

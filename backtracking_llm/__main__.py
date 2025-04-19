@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import functools
 import logging
 import typing
 import sys
@@ -84,21 +83,26 @@ def _main() -> None:
     args = _parse_arguments()
     logger = _setup_logging(args.verbose)
 
-    inference_config = inference.InferenceConfig(
-        max_answer_length=args.max_answer_length,
-        top_k=args.top_k,
-        temperature=args.temperature,
-        backtrack_every_n=args.backtrack_every_n,
-        backtrack_fn=decision.simple_threshold_decision,
-        backtrack_fn_config={
-            "probability_threshold": args.probability_threshold,
-        },
-        device=None)
-
     try:
+        inference_config = inference.InferenceConfig(
+            max_answer_length=args.max_answer_length,
+            top_k=args.top_k,
+            temperature=args.temperature,
+            backtrack_every_n=args.backtrack_every_n,
+            backtrack_fn=decision.simple_threshold_decision,
+            backtrack_fn_config={
+                "probability_threshold": args.probability_threshold,
+            },
+            device=None)
+
         engine = inference.InferenceEngine(model_name=args.model,
                                            logger=logger,
                                            config=inference_config)
+
+        chat_session = question_answering.ChatSession(engine=engine,
+                                                      logger=logger)
+
+        chat_session.run()
     except inference.ModelInitializationError as e:
         logger.critical("Failed to initialize the model or tokenizer: %s", e)
         logger.critical(
@@ -106,10 +110,6 @@ def _main() -> None:
             "dependencies are installed, and you have an internet "
             "connection if needed.", args.model)
         sys.exit(1)
-
-    question_answering.run_qa_loop(engine=engine,
-                                   tokenizer=engine.tokenizer,
-                                   logger=logger)
 
 
 if __name__ == "__main__":

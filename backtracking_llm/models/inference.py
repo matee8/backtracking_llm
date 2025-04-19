@@ -12,8 +12,10 @@ def load_model_and_tokenizer(
     model_name: str, logger: logging.Logger
 ) -> tuple[transformers.PreTrainedModel, transformers.PreTrainedTokenizer]:
     try:
+        logging.info("Attempting to load model from '%s'...", model_name)
         tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
 
+        logging.info("Attempting to load tokenizer from '%s'...", model_name)
         model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
 
         if tokenizer.pad_token is None and tokenizer.eos_token is not None:
@@ -216,6 +218,7 @@ def _prepare_input_ids(prompt: typing.Union[str, torch.Tensor],
     try:
         if isinstance(prompt, str):
             try:
+                logger.debug("Tokenizing prompt (length: %d)", len(prompt))
                 input_ids: torch.Tensor = tokenizer(
                     prompt, return_tensors="pt").input_ids
             except Exception as e:
@@ -225,6 +228,8 @@ def _prepare_input_ids(prompt: typing.Union[str, torch.Tensor],
                              exc_info=True)
                 raise
         else:
+            logger.debug("Using already tokenized prompt (length: %d)",
+                         prompt.numel())
             input_ids = prompt
 
         if not isinstance(input_ids, torch.Tensor):
@@ -258,6 +263,7 @@ def _predict_next_token(
             context_manager = torch.no_grad()
 
         with context_manager:
+            logger.debug("Starting model generation.")
             outputs: modeling_outputs.CausalLMOutputWithCrossAttentions = model(
                 input_ids=input_ids,
                 past_key_values=past_key_values,
@@ -266,6 +272,7 @@ def _predict_next_token(
             updated_past_key_values = outputs.past_key_values
 
             if updated_past_key_values is not None:
+                logger.debug("Updating key-value cache.")
                 updated_cache = transformers.DynamicCache(
                     updated_past_key_values)
             else:
@@ -308,13 +315,18 @@ def _sample_next_token(
         return None
 
     if temperature == 0.:
+        logger.debug("Calculating probabilities.")
         probabilities = F.softmax(top_k_logits_seq, dim=-1)
 
+        logger.debug(
+            "Temperature = 0.0, chosing the token with highest logit.")
         chosen_token_relative_idx = torch.argmax(top_k_logits_seq)
     else:
+        logger.debug("Calculating probabilities.")
         probabilities = F.softmax(top_k_logits_seq / temperature, dim=-1)
 
         try:
+            logger.debug("Choosing the next token using multinomial sampling.")
             chosen_token_relative_idx = torch.multinomial(
                 probabilities, num_samples=1).squeeze()
         except RuntimeError as e:
@@ -327,6 +339,8 @@ def _sample_next_token(
             chosen_token_relative_idx = torch.argmax(probabilities)
 
     chosen_token_id = top_k_indices_seq[chosen_token_relative_idx].unsqueeze(0)
+
+    logger.debug("Chosen token id: %d.", chosen_token_id)
 
     return chosen_token_id, chosen_token_relative_idx, probabilities
 
@@ -426,9 +440,10 @@ def _handle_backtracking(
         logger: logging.Logger) -> tuple[torch.Tensor | None, int]:
     num_generated_tokens = generated_ids.shape[1] - prompt_length
     if num_generated_tokens > 0:
-        logger.debug("Calling backtrack decision function at the %d. token.",
-                     num_generated_tokens + 1)
         try:
+            logger.debug(
+                "Calling backtrack decision function at the %d."
+                "token. ", num_generated_tokens + 1)
             should_backtrack: bool
             num_to_remove: int
             should_backtrack, num_to_remove = backtracking_decision_function(
@@ -445,10 +460,6 @@ def _handle_backtracking(
         if should_backtrack:
             actual_num_to_remove = min(num_to_remove, num_generated_tokens)
 
-            logger.debug(
-                "Backtracking triggered at the %d. token. Removing %d "
-                "token(s).", num_generated_tokens + 1, actual_num_to_remove)
-
             if actual_num_to_remove <= 0:
                 logger.debug(
                     "Backtracking triggered but actual_num_to_remove "
@@ -456,6 +467,10 @@ def _handle_backtracking(
                 return None, 0
 
             if actual_num_to_remove > 1:
+                logger.debug(
+                    "Backtracking triggered at the %d. token. Removing %d "
+                    "token(s).", num_generated_tokens + 1,
+                    actual_num_to_remove)
                 generated_ids = generated_ids[:, :-(actual_num_to_remove - 1)]
 
             return generated_ids, actual_num_to_remove
@@ -479,6 +494,8 @@ def _trim_past_key_values(
         return past_key_values
 
     try:
+        logger.debug("Building new key-value cache, removing %d entries.",
+                     num_to_remove)
         new_past: list[tuple[torch.Tensor, ...]] = []
         for layer_past in past_key_values:
             new_layer_past: list[torch.Tensor] = []

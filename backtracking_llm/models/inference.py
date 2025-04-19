@@ -11,6 +11,13 @@ from transformers import modeling_outputs
 from backtracking_llm.models import decision
 
 
+class InferenceEngine(typing.Protocol):
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def generate(self, prompt: str | torch.Tensor) -> torch.Tensor | None:
+        ...
+
+
 class ModelInitializationError(RuntimeError):
     pass
 
@@ -20,7 +27,7 @@ class GenerationError(RuntimeError):
 
 
 @dataclasses.dataclass
-class InferenceConfig:
+class BacktrackingInferenceConfig:
     max_answer_length: int = 64
     top_k: int = 50
     temperature: float = 1.0
@@ -31,13 +38,13 @@ class InferenceConfig:
     device: str | None = None
 
 
-class InferenceEngine:
+class BacktrackingInferenceEngine:
 
     def __init__(
         self,
         model_name: str,
         logger: logging.Logger,
-        config: InferenceConfig = InferenceConfig()
+        config: BacktrackingInferenceConfig = BacktrackingInferenceConfig()
     ) -> None:
         self.logger = logger
         self.config = config

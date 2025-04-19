@@ -20,7 +20,8 @@ class ChatSession:
 
     def run(self) -> None:
         self.logger.info("Starting interactive Question-Answering session.")
-        self._log_session_info()
+        self.logger.info("Type your questions below. Press Ctrl+C or Ctrl+D "
+                         "(EOF) to exit.")
 
         try:
             while True:
@@ -80,23 +81,6 @@ class ChatSession:
             raise
         finally:
             self.logger.info("Chat session finished.")
-
-    def _log_session_info(self) -> None:
-        try:
-            model_name = self.engine.model.name_or_path
-        except AttributeError:
-            model_name = "N/A"
-
-        self.logger.info("Model: %s", model_name)
-        self.logger.info("Max answer length: %d, Temperature: %.2f, Top-K: %d",
-                         self.engine.config.max_answer_length,
-                         self.engine.config.temperature,
-                         self.engine.config.top_k)
-        self.logger.info("Backtracking: Function: %s, Config: %s",
-                         self.engine.config.backtrack_fn.__name__,
-                         self.engine.config.backtrack_fn_config)
-        self.logger.info("Type your questions below. Press Ctrl+C or Ctrl+D "
-                         "(EOF) to exit.")
 
     def _get_user_input(self) -> str | None:
         try:

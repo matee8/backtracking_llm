@@ -12,6 +12,7 @@ DEFAULT_TOP_K: typing.Final[int] = 50
 DEFAULT_TEMPERATURE: typing.Final[float] = 1.
 DEFAULT_BACKTRACK_EVERY_N: typing.Final[int] = 5
 DEFAULT_PROBABILITY_THRESHOLD: typing.Final[float] = .5
+DEFAULT_DEVICE: typing.Final[str] = "cpu"
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -60,6 +61,11 @@ def _parse_arguments() -> argparse.Namespace:
         help="probability threshold for the simple backtracking"
         "decision function")
 
+    parser.add_argument("--device",
+                        type=str,
+                        default=DEFAULT_DEVICE,
+                        help="device which the model inference will run on")
+
     return parser.parse_args()
 
 
@@ -83,33 +89,36 @@ def _main() -> None:
     args = _parse_arguments()
     logger = _setup_logging(args.verbose)
 
-    try:
-        inference_config = inference.InferenceConfig(
-            max_answer_length=args.max_answer_length,
-            top_k=args.top_k,
-            temperature=args.temperature,
-            backtrack_every_n=args.backtrack_every_n,
-            backtrack_fn=decision.simple_threshold_decision,
-            backtrack_fn_config={
-                "probability_threshold": args.probability_threshold,
-            },
-            device=None)
+    inference_config = inference.InferenceConfig(
+        max_answer_length=args.max_answer_length,
+        top_k=args.top_k,
+        temperature=args.temperature,
+        backtrack_every_n=args.backtrack_every_n,
+        backtrack_fn=decision.simple_threshold_decision,
+        backtrack_fn_config={
+            "probability_threshold": args.probability_threshold,
+        },
+        device=args.device)
 
+    try:
         engine = inference.InferenceEngine(model_name=args.model,
                                            logger=logger,
                                            config=inference_config)
-
-        chat_session = question_answering.ChatSession(engine=engine,
-                                                      logger=logger)
-
-        chat_session.run()
     except inference.ModelInitializationError as e:
-        logger.critical("Failed to initialize the model or tokenizer: %s", e)
-        logger.critical(
+        logger.error("Failed to initialize the model or tokenizer: %s", e)
+        logger.error(
             "Please ensure the model name ('%s') is correct, "
             "dependencies are installed, and you have an internet "
             "connection if needed.", args.model)
         sys.exit(1)
+
+    chat_session = question_answering.ChatSession(engine=engine, logger=logger)
+    try:
+        chat_session.run()
+    except Exception as e:
+        logger.error("An error occured during question answering loop: %s",
+                     e,
+                     exc_info=True)
 
 
 if __name__ == "__main__":

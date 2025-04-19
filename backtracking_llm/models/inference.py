@@ -37,6 +37,25 @@ class BacktrackingInferenceConfig:
         default_factory=lambda: {"probability_threshold": 0.5}))
     device: str | None = None
 
+    def __post_init__(self):
+        if self.max_answer_length <= 0:
+            raise ValueError("max_answer_length must be positive")
+
+        if self.top_k < 1:
+            raise ValueError("top_k must be at least 1")
+
+        if self.temperature < 0.0:
+            raise ValueError("temperature cannot be negative")
+
+        if self.backtrack_every_n < 1:
+            raise ValueError("backtrack_every_n must be at least 1")
+
+        if not callable(self.backtrack_fn):
+            raise ValueError("bactrack_fn must be a callable function")
+
+        if not isinstance(self.backtrack_fn_config, dict):
+            raise ValueError("backtrack_fn_config must be a dictionary.")
+
 
 class BacktrackingInferenceEngine:
 

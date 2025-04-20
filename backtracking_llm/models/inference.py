@@ -14,9 +14,8 @@ from backtracking_llm.models import decision
 
 class GenerationEventType(enum.Enum):
     TOKEN = 0
-    BACKTRACK = 1
-    END = 2
-    ERROR = 3
+    END = 1
+    ERROR = 2
 
 
 @dataclasses.dataclass
@@ -137,17 +136,6 @@ class BacktrackingInferenceEngine:
 
                 token_id = seq_indices[rel_idx].unsqueeze(0)
 
-                try:
-                    decoded = self.tokenizer.decode(token_id.item(),
-                                                    skip_special_tokens=True)
-                    _send_event(GenerationEventType.TOKEN, decoded)
-                except Exception as e:
-                    self.logger.warning("Failed to decode token ID %d: %s",
-                                        token_id.item(), e)
-                    _send_event(GenerationEventType.ERROR,
-                                "Failed to decode token.")
-                    decoded = None
-
                 if (step + 1) % self.config.backtrack_every_n == 0:
                     should, num = self._handle_backtrack(generated_count=step,
                                                          logits=logits,
@@ -157,9 +145,6 @@ class BacktrackingInferenceEngine:
                         self.logger.debug(
                             "Backtracking triggered after %d "
                             "tokens. Removing %d tokens.", step, num)
-
-                        if decoded:
-                            _send_event(GenerationEventType.BACKTRACK, num)
 
                         if num > 1:
                             generated = generated[:, :-num]
@@ -175,6 +160,16 @@ class BacktrackingInferenceEngine:
                     self.logger.debug("EOS at step %d; stopping.", step)
                     _send_event(GenerationEventType.END, None)
                     break
+
+                try:
+                    decoded = self.tokenizer.decode(token_id.item(),
+                                                    skip_special_tokens=True)
+                    _send_event(GenerationEventType.TOKEN, decoded)
+                except Exception as e:
+                    self.logger.warning("Failed to decode token ID %d: %s",
+                                        token_id.item(), e)
+                    _send_event(GenerationEventType.ERROR,
+                                "Failed to decode token.")
 
                 generated = torch.cat([generated, token_id.view(1, 1)], dim=-1)
                 current = token_id.view(1, 1)

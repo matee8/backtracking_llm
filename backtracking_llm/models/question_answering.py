@@ -10,26 +10,13 @@ def cli_get_input() -> str:
     return input("You: ")
 
 
-class CLIOutputHandler:
-
-    def __init__(self) -> None:
-        self._buffer: list[str] = []
-
-    def display(self, event: inference.GenerationEvent) -> None:
-        if event.type == inference.GenerationEventType.TOKEN:
-            print(event.data, end="", flush=True)
-            self._buffer.append(event.data)
-        elif event.type == inference.GenerationEventType.BACKTRACK:
-            remove = self._buffer[-event.data:]
-            num = 0
-            for tok in remove:
-                num += len(tok)
-            backspaces = "\b" * num
-            print(backspaces, end="", flush=True)
-        elif event.type == inference.GenerationEventType.END:
-            print()
-        elif event.type == inference.GenerationEventType.ERROR:
-            print(f"Error: {event.data}", flush=True)
+def cli_display_output(event: inference.GenerationEvent) -> None:
+    if event.type == inference.GenerationEventType.TOKEN:
+        print(event.data, end="", flush=True)
+    elif event.type == inference.GenerationEventType.END:
+        print()
+    elif event.type == inference.GenerationEventType.ERROR:
+        print(f"Error: {event.data}", flush=True)
 
 
 class ChatError(RuntimeError):
@@ -44,7 +31,7 @@ class ChatSession:
         logger: logging.Logger,
         input_fn: typing.Callable[[], str] = cli_get_input,
         output_fn: typing.Callable[[inference.GenerationEvent],
-                                   None] = CLIOutputHandler().display
+                                   None] = cli_display_output
     ) -> None:
         self.engine = engine
         self.tokenizer = engine.tokenizer

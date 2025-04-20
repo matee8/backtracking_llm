@@ -7,7 +7,7 @@ class BacktrackStrategy(typing.Protocol):
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor,
-                         token_idx: torch.Tensor) -> tuple[bool, int]:
+                         token_idx: torch.Tensor) -> int:
         ...
 
 
@@ -23,13 +23,13 @@ class ProbabilityThresholdDecision:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor,
-                         token_idx: torch.Tensor) -> tuple[bool, int]:
+                         token_idx: torch.Tensor) -> int:
         if not 0 <= token_idx.item() < len(probabilities):
-            return False, 0
+            return 0
 
         prob = probabilities[token_idx].item()
 
         if prob < self.threshold:
-            return True, self.BACKTRACK_TOKEN_COUNT
+            return self.BACKTRACK_TOKEN_COUNT
         else:
-            return False, 0
+            return 0

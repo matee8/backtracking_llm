@@ -126,11 +126,11 @@ class BacktrackingInferenceEngine:
                 token_id = seq_indices[rel_idx].unsqueeze(0)
 
                 if (step + 1) % self.config.backtrack_every_n == 0:
-                    should, num = self._handle_backtrack(generated_count=step,
-                                                         logits=logits,
-                                                         probabilities=probs,
-                                                         rel_idx=rel_idx)
-                    if should:
+                    num = self._handle_backtrack(generated_count=step,
+                                                 logits=logits,
+                                                 probabilities=probs,
+                                                 rel_idx=rel_idx)
+                    if 0 < num:
                         self.logger.debug(
                             "Backtracking triggered after %d "
                             "tokens. Removing %d tokens.", step, num)
@@ -355,13 +355,13 @@ class BacktrackingInferenceEngine:
 
     def _handle_backtrack(self, generated_count: int, logits: torch.Tensor,
                           probabilities: torch.Tensor,
-                          rel_idx: torch.Tensor) -> tuple[bool, int]:
+                          rel_idx: torch.Tensor) -> int:
         if generated_count <= 0:
             self.logger.debug("Cannot backtrack if nothing is generated.")
-            return False, 0
+            return 0
 
         try:
-            should, num = self.config.backtrack_strategy.should_backtrack(
+            num = self.config.backtrack_strategy.should_backtrack(
                 logits, probabilities, rel_idx)
         except Exception as e:
             self.logger.error(
@@ -370,15 +370,15 @@ class BacktrackingInferenceEngine:
                 generated_count,
                 e,
                 exc_info=True)
-            return False, 0
+            return 0
 
         if num < 0:
             self.logger.debug(
                 "Backtracking triggered but num_to_remove=%d. "
                 "No changes made", num)
-            return False, 0
+            return 0
 
-        return should, min(num, generated_count)
+        return min(num, generated_count)
 
     def _trim_past(self, past: transformers.DynamicCache | None,
                    num: int) -> transformers.DynamicCache | None:

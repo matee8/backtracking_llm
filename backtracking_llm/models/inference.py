@@ -147,8 +147,9 @@ class BacktrackingInferenceEngine:
                             "tokens. Removing %d tokens.", step, num)
 
                         if num > 1:
-                            generated = generated[:, :-num]
-                            past = self._trim_past(past, num)
+                            generated = generated[:, :-(num - 1)]
+
+                        past = self._trim_past(past, num)
 
                         current = generated[:, -1:]
                         step -= num
@@ -392,6 +393,9 @@ class BacktrackingInferenceEngine:
     def _trim_past(self, past: transformers.DynamicCache | None,
                    num: int) -> transformers.DynamicCache | None:
         if not past or num <= 0:
+            self.logger.warning(
+                "Trimming requested with None or num_to_remove="
+                "%d. No changes made.", num)
             return past
 
         try:
@@ -399,11 +403,14 @@ class BacktrackingInferenceEngine:
 
             for layer in past:
                 trimmed: list[torch.Tensor] = []
+
                 for tensor in layer:
                     if tensor.dim() < 2:
                         raise ValueError("Cannot trim 1D tensor.")
+
                     length = tensor.shape[-2] - num
                     trimmed.append(tensor[..., :length, :])
+
                 new_cache.append(tuple(trimmed))
 
             return transformers.DynamicCache(new_cache)

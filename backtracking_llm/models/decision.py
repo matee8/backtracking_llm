@@ -13,11 +13,14 @@ class BacktrackStrategy(typing.Protocol):
 
 class ProbabilityThresholdDecision:
 
-    BACKTRACK_TOKEN_COUNT: typing.Final[int] = 1
-
-    def __init__(self, threshold: float = 0.05) -> None:
+    def __init__(self,
+                 threshold: float = 0.05,
+                 backtrack_count: int = 1) -> None:
         if not 0.0 < threshold < 1.0:
             raise ValueError("Threshold must be between 0.0 and 1.0")
+
+        if backtrack_count < 1:
+            raise ValueError("Backtrack count must be positive")
 
         self.threshold = threshold
 
@@ -30,6 +33,6 @@ class ProbabilityThresholdDecision:
         prob = probabilities[token_idx].item()
 
         if prob < self.threshold:
-            return self.BACKTRACK_TOKEN_COUNT
+            return self.backtrack_count
         else:
             return 0

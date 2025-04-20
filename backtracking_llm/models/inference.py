@@ -48,7 +48,7 @@ class BacktrackingInferenceConfig:
     temperature: float = 1.0
     backtrack_every_n: int = 5
     backtrack_strategy: decision.BacktrackStrategy = (
-        decision.ProbabilityThresholdDecision())
+        decision.ProbabilityThreshold())
     device: str | None = None
 
     def __post_init__(self):
@@ -129,7 +129,8 @@ class BacktrackingInferenceEngine:
                     num = self._handle_backtrack(generated_count=step,
                                                  logits=logits,
                                                  probabilities=probs,
-                                                 rel_idx=rel_idx)
+                                                 rel_idx=rel_idx,
+                                                 token_id=token_id)
                     if 0 < num:
                         self.logger.debug(
                             "Backtracking triggered after %d "
@@ -354,15 +355,15 @@ class BacktrackingInferenceEngine:
         return rel
 
     def _handle_backtrack(self, generated_count: int, logits: torch.Tensor,
-                          probabilities: torch.Tensor,
-                          rel_idx: torch.Tensor) -> int:
+                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
+                          token_id: torch.Tensor) -> int:
         if generated_count <= 0:
             self.logger.debug("Cannot backtrack if nothing is generated.")
             return 0
 
         try:
             num = self.config.backtrack_strategy.should_backtrack(
-                logits, probabilities, rel_idx)
+                logits, probabilities, rel_idx, token_id)
         except Exception as e:
             self.logger.error(
                 "Error calling backtracking decision function at"

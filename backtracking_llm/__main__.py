@@ -17,6 +17,17 @@ DEFAULT_BACKTRACK_EVERY_N: typing.Final[int] = 5
 DEFAULT_PROBABILITY_THRESHOLD: typing.Final[float] = .5
 DEFAULT_DEVICE: typing.Final[str] = "cpu"
 
+DECISION_MAP: typing.Final[dict[str, decision.BacktrackStrategy]] = {
+    "probability_threshold": decision.ProbabilityThreshold(),
+    "entropy_threshold": decision.EntropyThreshold(),
+    "probability_margin": decision.ProbabilityMargin(),
+    "probability_drop": decision.ProbabilityDrop(),
+    "probability_trend": decision.ProbabilityTrend(),
+    "repetition": decision.Repetition(),
+    "ngram_overlap": decision.NGramOverlap(),
+    "logit_threshold": decision.LogitThreshold(),
+}
+
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -57,12 +68,9 @@ def _parse_arguments() -> argparse.Namespace:
                         default=DEFAULT_BACKTRACK_EVERY_N,
                         help="check for backtracking every N generated tokens")
 
-    parser.add_argument(
-        "--probability-threshold",
-        type=float,
-        default=DEFAULT_PROBABILITY_THRESHOLD,
-        help="probability threshold for the simple backtracking"
-        "decision function")
+    parser.add_argument("--decision-function",
+                        help="the name of the decision function to use",
+                        choices=DECISION_MAP.keys())
 
     parser.add_argument("--device",
                         type=str,
@@ -112,8 +120,7 @@ def _main() -> None:
         top_k=args.top_k,
         temperature=args.temperature,
         backtrack_every_n=args.backtrack_every_n,
-        backtrack_strategy=(decision.ProbabilityThresholdDecision(
-            args.probability_threshold)),
+        backtrack_strategy=DECISION_MAP[args.decision_function],
         device=args.device)
 
     try:

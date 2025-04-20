@@ -6,17 +6,46 @@ import torch
 from backtracking_llm.models import inference
 
 
+def cli_get_input() -> str:
+    return input("You: ")
+
+
+class CLIOutputHandler:
+
+    def __init__(self) -> None:
+        self._buffer: list[str] = []
+
+    def display(self, event: inference.GenerationEvent) -> None:
+        if event.type == inference.GenerationEventType.TOKEN:
+            print(event.data, end="", flush=True)
+            self._buffer.append(event.data)
+        elif event.type == inference.GenerationEventType.BACKTRACK:
+            remove = self._buffer[-event.data:]
+            num = 0
+            for tok in remove:
+                num += len(tok)
+            backspaces = "\b" * num
+            print(backspaces, end="", flush=True)
+        elif event.type == inference.GenerationEventType.END:
+            print()
+        elif event.type == inference.GenerationEventType.ERROR:
+            print(f"Error: {event.data}", flush=True)
+
+
 class ChatError(RuntimeError):
     pass
 
 
 class ChatSession:
 
-    def __init__(self,
-                 engine: inference.InferenceEngine,
-                 logger: logging.Logger,
-                 input_fn: typing.Callable[[], str] = lambda: input("You: "),
-                 output_fn: typing.Callable[[str], None] = print) -> None:
+    def __init__(
+        self,
+        engine: inference.InferenceEngine,
+        logger: logging.Logger,
+        input_fn: typing.Callable[[], str] = cli_get_input,
+        output_fn: typing.Callable[[inference.GenerationEvent],
+                                   None] = CLIOutputHandler().display
+    ) -> None:
         self.engine = engine
         self.tokenizer = engine.tokenizer
         self.logger = logger
@@ -107,14 +136,13 @@ class ChatSession:
     def _process_conversation_turn(self) -> None:
         prompt_ids = self._prepare_prompt()
 
-        generated_ids = self.engine.generate(prompt_ids)
+        generated_ids = self.engine.generate(prompt_ids, self.output_fn)
         if generated_ids is None:
             raise ChatError("Model generation did not return valid output.")
 
         answer = self._process_model_output(generated_ids,
                                             prompt_ids.shape[-1])
 
-        self.output_fn(answer)
         self.chat_history.append({"role": "assistant", "content": answer})
 
     def _prepare_prompt(self) -> torch.Tensor:

@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 import functools
 import logging
 import typing
@@ -11,10 +12,26 @@ from transformers import modeling_outputs
 from backtracking_llm.models import decision
 
 
+class GenerationEventType(enum.Enum):
+    TOKEN = 0
+    BACKTRACK = 1
+    END = 2
+    ERROR = 3
+
+
+@dataclasses.dataclass
+class GenerationEvent:
+    type: GenerationEventType
+    data: typing.Any
+
+
 class InferenceEngine(typing.Protocol):
     tokenizer: transformers.PreTrainedTokenizer
 
-    def generate(self, prompt: str | torch.Tensor) -> torch.Tensor | None:
+    def generate(
+        self, prompt: str | torch.Tensor,
+        token_callback: typing.Callable[[GenerationEvent], None] | None
+    ) -> torch.Tensor | None:
         ...
 
 
@@ -83,9 +100,24 @@ class BacktrackingInferenceEngine:
         self.backtrack_fn = functools.partial(self.config.backtrack_fn,
                                               self.config.backtrack_fn_config)
 
-    def generate(self, prompt: str | torch.Tensor) -> torch.Tensor | None:
+    def generate(
+        self, prompt: str | torch.Tensor,
+        token_callback: typing.Callable[[GenerationEvent], None] | None
+    ) -> torch.Tensor | None:
         input_ids: torch.Tensor | None = None
         generated: torch.Tensor | None = None
+
+        def _send_event(event_type: GenerationEventType,
+                        data: typing.Any) -> None:
+            if token_callback:
+                try:
+                    token_callback(GenerationEvent(type=event_type, data=data))
+                except Exception as e:
+                    self.logger.error(
+                        "Error executing generation callback: %s",
+                        e,
+                        exc_info=True)
+
         try:
             input_ids = self._prepare_input_ids(prompt).to(self.device)
 
@@ -105,25 +137,43 @@ class BacktrackingInferenceEngine:
 
                 token_id = seq_indices[rel_idx].unsqueeze(0)
 
+                try:
+                    decoded = self.tokenizer.decode(token_id.item(),
+                                                    skip_special_tokens=True)
+                    _send_event(GenerationEventType.TOKEN, decoded)
+                except Exception as e:
+                    self.logger.warning("Failed to decode token ID %d: %s",
+                                        token_id.item(), e)
+                    _send_event(GenerationEventType.ERROR,
+                                "Failed to decode token.")
+                    decoded = None
+
                 if (step + 1) % self.config.backtrack_every_n == 0:
                     should, num = self._handle_backtrack(generated_count=step,
                                                          logits=logits,
                                                          probabilities=probs,
                                                          rel_idx=rel_idx)
-
                     if should:
                         self.logger.debug(
                             "Backtracking triggered after %d "
                             "tokens. Removing %d tokens.", step, num)
-                        generated = generated[:, :-num]
-                        past = self._trim_past(past, num)
+
+                        if decoded:
+                            _send_event(GenerationEventType.BACKTRACK, num)
+
+                        if num > 1:
+                            generated = generated[:, :-num]
+                            past = self._trim_past(past, num)
+
                         current = generated[:, -1:]
                         step -= num
+
                         continue
 
                 if (self.tokenizer.eos_token_id is not None
                         and token_id.item() == self.tokenizer.eos_token_id):
                     self.logger.debug("EOS at step %d; stopping.", step)
+                    _send_event(GenerationEventType.END, None)
                     break
 
                 generated = torch.cat([generated, token_id.view(1, 1)], dim=-1)
@@ -134,22 +184,32 @@ class BacktrackingInferenceEngine:
                                     "No new tokens were generated.")
                 return None
 
+            _send_event(GenerationEventType.END, None)
             return generated
         except KeyboardInterrupt:
-            self.logger.warning("Generation interrupted by user.")
+            msg = "Generation interrupted by user."
+
+            self.logger.warning(msg)
+            _send_event(GenerationEventType.ERROR, msg)
+
             if (generated is not None and input_ids is not None
                     and generated.shape[1] > input_ids.shape[1]):
                 self.logger.info("Returning partially generated sequence.")
                 return generated
+
             return None
         except GenerationError as e:
-            self.logger.error("Generation failed due to GenerationError: %s",
-                              e,
-                              exc_info=True)
+            msg = "Generation failed due to GenerationError"
+
+            self.logger.error("%s: %s", msg, e, exc_info=True)
+
+            _send_event(GenerationEventType.ERROR, msg)
+
             if (generated is not None and input_ids is not None
                     and generated.shape[1] > input_ids.shape[1]):
                 self.logger.info("Returning partially generated sequence.")
                 return generated
+
             raise
         except Exception as e:
             self.logger.error(
@@ -157,10 +217,14 @@ class BacktrackingInferenceEngine:
                 "generation loop: %s",
                 e,
                 exc_info=True)
+
+            _send_event(GenerationEventType.ERROR, "Unexpected error.")
+
             if (generated is not None and input_ids is not None
                     and generated.shape[1] > input_ids.shape[1]):
                 self.logger.info("Returning partially generated sequence.")
                 return generated
+
             raise
 
     def _setup_device(self, device_str: str | None) -> torch.device:

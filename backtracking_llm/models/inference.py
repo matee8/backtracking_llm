@@ -1,6 +1,5 @@
 import dataclasses
 import enum
-import functools
 import logging
 import typing
 
@@ -48,9 +47,10 @@ class BacktrackingInferenceConfig:
     top_k: int = 50
     temperature: float = 1.0
     backtrack_every_n: int = 5
-    backtrack_fn: decision.BacktrackFn = decision.simple_threshold_decision
-    backtrack_fn_config: dict[str, typing.Any] = (dataclasses.field(
-        default_factory=lambda: {"probability_threshold": 0.5}))
+    backtrack_strategy: decision.BacktrackStrategy = (
+        decision.ProbabilityThresholdDecision({
+            "probability_threshold": 0.5,
+        }))
     device: str | None = None
 
     def __post_init__(self):
@@ -66,11 +66,8 @@ class BacktrackingInferenceConfig:
         if self.backtrack_every_n < 1:
             raise ValueError("backtrack_every_n must be at least 1")
 
-        if not callable(self.backtrack_fn):
-            raise ValueError("bactrack_fn must be a callable function")
-
-        if not isinstance(self.backtrack_fn_config, dict):
-            raise ValueError("backtrack_fn_config must be a dictionary.")
+        if self.backtrack_strategy.config is None:
+            raise ValueError("backtrack_strategy.config must be set")
 
 
 class BacktrackingInferenceEngine:
@@ -95,9 +92,6 @@ class BacktrackingInferenceEngine:
             msg = f"Failed to move model to device {self.device}"
             self.logger.error("%s: %s", msg, e, exc_info=True)
             raise ModelInitializationError(msg) from e
-
-        self.backtrack_fn = functools.partial(self.config.backtrack_fn,
-                                              self.config.backtrack_fn_config)
 
     def generate(
         self, prompt: str | torch.Tensor,
@@ -372,7 +366,8 @@ class BacktrackingInferenceEngine:
             return False, 0
 
         try:
-            should, num = self.backtrack_fn(logits, probabilities, rel_idx)
+            should, num = self.config.backtrack_strategy.should_backtrack(
+                logits, probabilities, rel_idx)
         except Exception as e:
             self.logger.error(
                 "Error calling backtracking decision function at"

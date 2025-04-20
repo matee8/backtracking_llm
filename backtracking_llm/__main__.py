@@ -107,15 +107,17 @@ def _main() -> None:
     args = _parse_arguments()
     logger = _setup_logging(args.verbose, args.log_stdout)
 
+    backtrack_config = {
+        "probability_threshold": args.probability_threshold,
+    }
+
     inference_config = inference.BacktrackingInferenceConfig(
         max_answer_length=args.max_answer_length,
         top_k=args.top_k,
         temperature=args.temperature,
         backtrack_every_n=args.backtrack_every_n,
-        backtrack_fn=decision.simple_threshold_decision,
-        backtrack_fn_config={
-            "probability_threshold": args.probability_threshold,
-        },
+        backtrack_strategy=(
+            decision.ProbabilityThresholdDecision(backtrack_config)),
         device=args.device)
 
     try:

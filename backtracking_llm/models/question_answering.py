@@ -1,4 +1,5 @@
 import logging
+import typing
 
 import torch
 
@@ -11,11 +12,16 @@ class ChatError(RuntimeError):
 
 class ChatSession:
 
-    def __init__(self, engine: inference.InferenceEngine,
-                 logger: logging.Logger) -> None:
+    def __init__(self,
+                 engine: inference.InferenceEngine,
+                 logger: logging.Logger,
+                 input_fn: typing.Callable[[], str] = lambda: input("You: "),
+                 output_fn: typing.Callable[[str], None] = print) -> None:
         self.engine = engine
         self.tokenizer = engine.tokenizer
         self.logger = logger
+        self.input_fn = input_fn
+        self.output_fn = output_fn
         self.chat_history: list[dict[str, str]] = []
 
     def run(self) -> None:
@@ -84,7 +90,7 @@ class ChatSession:
 
     def _get_user_input(self) -> str | None:
         try:
-            text = input("You: ")
+            text = self.input_fn()
 
             if not text or not text.strip():
                 self.logger.info("Empty input; please type a question.")
@@ -92,7 +98,6 @@ class ChatSession:
 
             return text.strip()
         except (KeyboardInterrupt, EOFError):
-            print("\n", end="")
             raise
         except Exception as e:
             msg = "Error reading user input"
@@ -109,7 +114,7 @@ class ChatSession:
         answer = self._process_model_output(generated_ids,
                                             prompt_ids.shape[-1])
 
-        print(answer)
+        self.output_fn(answer)
         self.chat_history.append({"role": "assistant", "content": answer})
 
     def _prepare_prompt(self) -> torch.Tensor:

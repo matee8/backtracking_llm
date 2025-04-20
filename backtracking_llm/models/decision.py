@@ -4,7 +4,6 @@ import torch
 
 
 class BacktrackStrategy(typing.Protocol):
-    config: dict[str, typing.Any]
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor,
@@ -16,17 +15,21 @@ class ProbabilityThresholdDecision:
 
     BACKTRACK_TOKEN_COUNT: typing.Final[int] = 1
 
-    config: dict[str, typing.Any]
+    def __init__(self, threshold: float = 0.05) -> None:
+        if not 0.0 < threshold < 1.0:
+            raise ValueError("Threshold must be between 0.0 and 1.0")
 
-    def __init__(self, config: dict[str, typing.Any]) -> None:
-        self.config = config
+        self.threshold = threshold
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor,
                          token_idx: torch.Tensor) -> tuple[bool, int]:
-        chosen_prob = probabilities[token_idx].item()
+        if not 0 <= token_idx.item() < len(probabilities):
+            return False, 0
 
-        if chosen_prob < self.config["probability_threshold"]:
+        prob = probabilities[token_idx].item()
+
+        if prob < self.threshold:
             return True, self.BACKTRACK_TOKEN_COUNT
         else:
             return False, 0

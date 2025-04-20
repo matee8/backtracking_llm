@@ -48,9 +48,7 @@ class BacktrackingInferenceConfig:
     temperature: float = 1.0
     backtrack_every_n: int = 5
     backtrack_strategy: decision.BacktrackStrategy = (
-        decision.ProbabilityThresholdDecision({
-            "probability_threshold": 0.5,
-        }))
+        decision.ProbabilityThresholdDecision())
     device: str | None = None
 
     def __post_init__(self):
@@ -65,9 +63,6 @@ class BacktrackingInferenceConfig:
 
         if self.backtrack_every_n < 1:
             raise ValueError("backtrack_every_n must be at least 1")
-
-        if self.backtrack_strategy.config is None:
-            raise ValueError("backtrack_strategy.config must be set")
 
 
 class BacktrackingInferenceEngine:

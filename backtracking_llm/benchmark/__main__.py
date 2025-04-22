@@ -236,11 +236,15 @@ def _main() -> None:
             baseline_results["results"][TASK_NAME].get("acc,none")))
 
         if score is None:
-            raise KeyError("Could not find standard accuracy metric "
-                           "(acc_norm or acc).")
+            score = (
+                baseline_results["results"][TASK_NAME].get("exact_match,none"))
 
-        logger.info("Baseline %s Accuracy (acc_norm/acc): %.4f", TASK_NAME,
-                    score)
+        if score is None:
+            raise KeyError("Could not find standard accuracy metric "
+                           "(acc_norm, acc or exact_match).")
+
+        logger.info("Baseline %s Accuracy (acc_norm/acc/exact_match): %.4f",
+                    TASK_NAME, score)
     except (KeyError, StopIteration) as e:
         logger.warning(
             "Could not extract baseline primary score "
@@ -294,15 +298,17 @@ def _main() -> None:
             strategy_results[strategy_name] = results
 
             try:
-                task_name = next(iter(results["results"].keys()))
-
-                score = (results["results"][task_name].get(
+                score = (results["results"][TASK_NAME].get(
                     "acc_norm,none",
-                    results["results"][task_name].get("acc,none")))
+                    results["results"][TASK_NAME].get("acc,none")))
+
+                if score is None:
+                    score = (results["results"][TASK_NAME].get(
+                        "exact_match,none"))
 
                 if score is None:
                     raise KeyError("Could not find standard accuracy metric "
-                                   "(acc_norm or acc).")
+                                   "(acc_norm, acc or exact_match).")
 
                 logger.info("Strategy %s score: %.4f", strategy_name, score)
 
@@ -312,7 +318,7 @@ def _main() -> None:
                     logger.info("New best strategy found.")
             except (KeyError, StopIteration) as e:
                 logger.warning(
-                    "Could not extract baseline primary score "
+                    "Could not extract strategy primary score "
                     "automatically: %s", e)
 
         except Exception:

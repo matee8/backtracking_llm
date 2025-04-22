@@ -8,7 +8,7 @@ class BacktrackStrategy(typing.Protocol):
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
+                         token_id: torch.Tensor) -> int:
         ...
 
 
@@ -28,7 +28,7 @@ class ProbabilityThreshold:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
+                         token_id: torch.Tensor) -> int:
         if not 0 <= rel_idx.item() < len(probabilities):
             return 0
 
@@ -53,7 +53,7 @@ class EntropyThreshold:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
+                         token_id: torch.Tensor) -> int:
         try:
             entropy = (-probabilities * probabilities.log()).sum()
         except Exception:
@@ -81,7 +81,7 @@ class ProbabilityMargin:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
+                         token_id: torch.Tensor) -> int:
         if len(probabilities) < 2:
             return 0
 
@@ -110,7 +110,7 @@ class ProbabilityDrop:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
+                         token_id: torch.Tensor) -> int:
         if not 0 <= rel_idx.item() < len(probabilities):
             self._last_chosen_probability = None
             return 0
@@ -147,7 +147,7 @@ class ProbabilityTrend:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
+                         token_id: torch.Tensor) -> int:
         current_prob = probabilities[rel_idx].item()
         if self._history:
             mean_prob = sum(self._history) / len(self._history)
@@ -175,8 +175,8 @@ class Repetition:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
-        idx = int(token_idx)
+                         token_id: torch.Tensor) -> int:
+        idx = int(token_id)
         if idx == self._last_idx:
             self._repeat_count += 1
         else:
@@ -203,8 +203,8 @@ class NGramOverlap:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
-        idx = int(token_idx)
+                         token_id: torch.Tensor) -> int:
+        idx = int(token_id)
 
         self._history.append(idx)
 
@@ -232,7 +232,7 @@ class LogitThreshold:
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,
-                         token_idx: torch.Tensor) -> int:
+                         token_id: torch.Tensor) -> int:
         if not 0 <= rel_idx.item() < len(logits):
             return 0
 

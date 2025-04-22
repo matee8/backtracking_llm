@@ -34,7 +34,6 @@ def _parse_arguments() -> argparse.Namespace:
         description="Run inference on any model and use backtracking to remove "
         "already generated tokens",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
     parser.add_argument("--model",
                         type=str,
                         help="id of the pre-trained model "

@@ -7,7 +7,7 @@ import time
 import typing
 import sys
 
-from lm_eval import evaluator
+import lm_eval
 from lm_eval.models import huggingface
 from lm_eval.api import instance
 
@@ -20,8 +20,8 @@ LIMIT_FOR_SEARCH: typing.Final[int] = 500
 BACKTRACK_EVERY_N: typing.Final[int] = 5
 OUTPUT_DIR: typing.Final[str] = "benchmark_results"
 DEVICE: typing.Final[str] = "cpu"
-DECISION_STRATEGIES: typing.Final[list[typing.Type[
-    decision.BacktrackStrategy]]] = [
+DECISION_STRATEGIES: (
+    typing.Final[list[typing.Type[decision.BacktrackStrategy]]]) = [
         decision.ProbabilityThreshold,
         decision.EntropyThreshold,
         decision.ProbabilityMargin,
@@ -124,12 +124,12 @@ def _run_evaluation(
     model_args["device"] = DEVICE
 
     try:
-        results = evaluator.simple_evaluate(model=model_name,
-                                            model_args=model_args,
-                                            tasks=task_names,
-                                            num_fewshot=num_fewshot,
-                                            limit=limit,
-                                            bootstrap_iters=bootstrap_iters)
+        results = lm_eval.simple_evaluate(model=model_name,
+                                          model_args=model_args,
+                                          tasks=task_names,
+                                          num_fewshot=num_fewshot,
+                                          limit=limit,
+                                          bootstrap_iters=bootstrap_iters)
 
         if results is None:
             raise ValueError("Simple evaluate returned None.")
@@ -231,10 +231,9 @@ def _main() -> None:
         return
 
     try:
-        task_name = (next(iter(baseline_results["results"].keys())))
-        score = (baseline_results["results"][task_name].get(
+        score = (baseline_results["results"][TASK_NAME].get(
             "acc_norm,none",
-            baseline_results["results"][task_name].get("acc,none")))
+            baseline_results["results"][TASK_NAME].get("acc,none")))
 
         if score is None:
             raise KeyError("Could not find standard accuracy metric "
@@ -254,8 +253,8 @@ def _main() -> None:
     best_strategy_score = -1.0
 
     if not DECISION_STRATEGIES:
-        raise ValueError(
-            "No decision strategies defined in DECISION_STRATEGIES.")
+        raise ValueError("No decision strategies defined in "
+                         "DECISION_STRATEGIES.")
 
     for strategy_cls in DECISION_STRATEGIES:
         strategy_name = strategy_cls.__name__

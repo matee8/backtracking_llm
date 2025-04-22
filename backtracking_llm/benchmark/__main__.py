@@ -84,7 +84,7 @@ class BacktrackingLM(huggingface.HFLM):
                 continue
 
             try:
-                self.logger.debug("Generating for context: '%s...'", context)
+                self.logger.debug("Generating for context: '%s...'", context[:50])
 
                 token_ids = self.engine.generate(context, None)
                 if token_ids is None:
@@ -95,7 +95,7 @@ class BacktrackingLM(huggingface.HFLM):
 
                 decoded = self.tokenizer.decode(token_ids[0])
 
-                self.logger.debug("Raw generated text: '%s...'", decoded)
+                self.logger.debug("Raw generated text: '%s...'", decoded[:50])
 
                 results.append(decoded.strip())
             except Exception:

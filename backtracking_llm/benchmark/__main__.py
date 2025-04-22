@@ -14,7 +14,7 @@ from lm_eval.api import instance
 from backtracking_llm.models import inference, decision
 
 MODEL_NAME: typing.Final[str] = "Qwen/Qwen2.5-0.5B-Instruct"
-TASK_NAME: typing.Final[str] = "hendrycks_math"
+TASK_NAME: typing.Final[str] = "hendrycks_math_algebra"
 NUM_FEWSHOT: typing.Final[int] = 8
 LIMIT_FOR_SEARCH: typing.Final[int] = 500
 BACKTRACK_EVERY_N: typing.Final[int] = 5
@@ -158,7 +158,7 @@ def _run_evaluation(
         os.makedirs(OUTPUT_DIR, exist_ok=True)
 
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=4)
+            json.dump([results["results"], results["samples"]], f, indent=4)
 
         logger.info("Evaluation %s finished in %.2f seconds.", description,
                     end_time - start_time)

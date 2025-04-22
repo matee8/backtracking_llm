@@ -9,14 +9,14 @@ import sys
 
 import lm_eval
 from lm_eval.models import huggingface
-from lm_eval.api import instance
+from lm_eval.api import instance, registry
 
 from backtracking_llm.models import inference, decision
 
 MODEL_NAME: typing.Final[str] = "Qwen/Qwen2.5-0.5B-Instruct"
 TASK_NAME: typing.Final[str] = "hendrycks_math_algebra"
 NUM_FEWSHOT: typing.Final[int] = 8
-LIMIT_FOR_SEARCH: typing.Final[int] = 500
+LIMIT_FOR_SEARCH: typing.Final[int] = 1
 BACKTRACK_EVERY_N: typing.Final[int] = 5
 OUTPUT_DIR: typing.Final[str] = "benchmark_results"
 DEVICE: typing.Final[str] = "cpu"
@@ -33,6 +33,7 @@ DECISION_STRATEGIES: (
     ]
 
 
+@registry.register_model("backtracking_llm")
 class BacktrackingLM(huggingface.HFLM):
 
     def __init__(self,
@@ -222,7 +223,7 @@ def _main() -> None:
         model_args=baseline_model_args,
         task_names=[TASK_NAME],
         num_fewshot=NUM_FEWSHOT,
-        limit=None,
+        limit=1,
         description="baseline_full_dataset",
         output_filename="results_baseline_full.json")
 
@@ -278,11 +279,12 @@ def _main() -> None:
             model_args = {
                 "pretrained": MODEL_NAME,
                 "backtracking_config": backtracking_config,
+                "logger": logger,
             }
 
             results = _run_evaluation(
                 logger,
-                model_name="hf",
+                model_name="backtracking_llm",
                 model_args=model_args,
                 task_names=[TASK_NAME],
                 num_fewshot=NUM_FEWSHOT,
@@ -303,8 +305,8 @@ def _main() -> None:
                     results["results"][TASK_NAME].get("acc,none")))
 
                 if score is None:
-                    score = (results["results"][TASK_NAME].get(
-                        "exact_match,none"))
+                    score = (
+                        results["results"][TASK_NAME].get("exact_match,none"))
 
                 if score is None:
                     raise KeyError("Could not find standard accuracy metric "

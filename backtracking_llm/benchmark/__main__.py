@@ -76,15 +76,27 @@ class BacktrackingLM(huggingface.HFLM):
         results = []
 
         for req in requests:
-            context = req.args[0]
+            args = req.args
 
-            if not isinstance(req.args[0], str):
+            if args is None or len(args) == 0:
+                self.logger.warning("Instance does not contain any arguments.")
+                results.append("Generation error")
+                continue
+
+            context = args[0]
+            if len(args) > 1:
+                stop_sequences = args[1].get("until", None)
+            else:
+                stop_sequences = None
+
+            if not isinstance(args[0], str):
                 self.logger.warning("Context is not of type 'str'. Skipping.")
                 results.append("Generation error")
                 continue
 
             try:
-                self.logger.debug("Generating for context: '%s...'", context[:50])
+                self.logger.debug("Generating for context: '%s...'",
+                                  context[:50])
 
                 token_ids = self.engine.generate(context, None)
                 if token_ids is None:
@@ -93,11 +105,19 @@ class BacktrackingLM(huggingface.HFLM):
                     results.append("Generation error")
                     continue
 
-                decoded = self.tokenizer.decode(token_ids[0])
+                decoded = self.tokenizer.decode(token_ids[0])[len(context):]
+
+                if stop_sequences:
+                    for seq in stop_sequences:
+                        index = decoded.find(seq)
+                        if index != -1:
+                            decoded = decoded[:index]
+                            self.logger.debug("Stopped at sequence: %s.", seq)
 
                 self.logger.debug("Raw generated text: '%s...'", decoded[:50])
 
                 results.append(decoded.strip())
+                print(results)
             except Exception:
                 self.logger.error(
                     "Error during generation for context '%s...'",

@@ -9,7 +9,7 @@ import sys
 
 import lm_eval
 from lm_eval.models import huggingface
-from lm_eval.api import instance, registry
+from lm_eval.api import instance, registry, model
 
 from backtracking_llm.models import inference, decision
 
@@ -41,7 +41,7 @@ class BacktrackingLM(huggingface.HFLM):
                  logger: logging.Logger, **kwargs) -> None:
         super().__init__(**kwargs)
 
-        self._backtracking_config = backtracking_config
+        self.backtracking_config = backtracking_config
         self.logger = logger
 
         self.engine = self._setup_engine()
@@ -49,7 +49,7 @@ class BacktrackingLM(huggingface.HFLM):
                     backtracking_config)
 
     def _setup_engine(self) -> inference.BacktrackingInferenceEngine:
-        self._backtracking_config.device = str(self.device)
+        self.backtracking_config.device = str(self.device)
 
         try:
             if not isinstance(self.pretrained, str):
@@ -59,7 +59,7 @@ class BacktrackingLM(huggingface.HFLM):
             engine = inference.BacktrackingInferenceEngine(
                 model_name=self.pretrained,
                 logger=self.logger,
-                config=self._backtracking_config)
+                config=self.backtracking_config)
 
             return engine
         except Exception:
@@ -117,7 +117,6 @@ class BacktrackingLM(huggingface.HFLM):
                 self.logger.debug("Raw generated text: '%s...'", decoded[:50])
 
                 results.append(decoded.strip())
-                print(results)
             except Exception:
                 self.logger.error(
                     "Error during generation for context '%s...'",
@@ -129,28 +128,52 @@ class BacktrackingLM(huggingface.HFLM):
 
 def _run_evaluation(
         logger: logging.Logger,
-        model_name: str,
-        model_args: dict[str, typing.Any],
+        lm: str | model.LM,
+        model_args: dict[str, typing.Any] | None,
         task_names: list[str | dict | object],
         num_fewshot: int,
         limit: int | None = None,
         description: str = "eval",
         output_filename: str | None = None,
         bootstrap_iters: int = 1000) -> dict[str, typing.Any] | None:
+    if isinstance(lm, str):
+        model_name = lm
+        if model_args is None:
+            raise ValueError("model_args cannot be None if model isn't "
+                             "initialized")
+    else:
+        if hasattr(lm, "pretrained"):
+            model_name = lm.pretrained
+        else:
+            logger.warning("LM has no 'pretrained' field. Can't get name "
+                           "of model.")
+            model_name = None
+
     start_time = time.time()
     logger.info(
         "Starting evaulation: %s - Model: %s, Tasks: %s, Limit: %s, "
         "Fewshot: %d", description, model_name, task_names, limit, num_fewshot)
 
-    model_args["device"] = DEVICE
+    if model_args is None:
+        model_args = {}
+        model_args["device"] = DEVICE
+    else:
+        model_args["device"] = DEVICE
 
     try:
-        results = lm_eval.simple_evaluate(model=model_name,
-                                          model_args=model_args,
-                                          tasks=task_names,
-                                          num_fewshot=num_fewshot,
-                                          limit=limit,
-                                          bootstrap_iters=bootstrap_iters)
+        if isinstance(lm, str):
+            results = lm_eval.simple_evaluate(model=lm,
+                                              model_args=model_args,
+                                              tasks=task_names,
+                                              num_fewshot=num_fewshot,
+                                              limit=limit,
+                                              bootstrap_iters=bootstrap_iters)
+        else:
+            results = lm_eval.simple_evaluate(model=lm,
+                                              tasks=task_names,
+                                              num_fewshot=num_fewshot,
+                                              limit=limit,
+                                              bootstrap_iters=bootstrap_iters)
 
         if results is None:
             raise ValueError("Simple evaluate returned None.")
@@ -189,7 +212,7 @@ def _run_evaluation(
 
         return results
     except Exception as e:
-        logger.error("Evaluation %s failed.", description)
+        logger.error("Evaluation %s failed: %s", description, e, exc_info=True)
 
         error_info = {
             "error": str(e),
@@ -235,11 +258,15 @@ def _main() -> None:
     logger.info("Starting benchmarking pipeline.")
     logger.info("Step 1: Running baseline evaluation (no backtracking).")
 
-    baseline_model_args = {"pretrained": MODEL_NAME}
+    baseline_model_args = {
+        "pretrained": MODEL_NAME,
+        "batch_size": 1,
+        "device": DEVICE
+    }
 
     baseline_results = _run_evaluation(
         logger,
-        model_name="hf",
+        lm="hf",
         model_args=baseline_model_args,
         task_names=[TASK_NAME],
         num_fewshot=NUM_FEWSHOT,
@@ -272,7 +299,7 @@ def _main() -> None:
             "automatically: %s", e)
         score = None
 
-    logger.info("Step 1: Comparing decision strategies.")
+    logger.info("Step 2: Comparing decision strategies.")
     strategy_results = {}
     best_strategy_cls = None
     best_strategy_score = -1.0
@@ -281,31 +308,34 @@ def _main() -> None:
         raise ValueError("No decision strategies defined in "
                          "DECISION_STRATEGIES.")
 
+    backtracking_config = inference.BacktrackingInferenceConfig(
+        max_answer_length=64,
+        top_k=50,
+        temperature=1.0,
+        backtrack_every_n=BACKTRACK_EVERY_N,
+        device=DEVICE)
+
+    model_args = {
+        "pretrained": MODEL_NAME,
+        "batch_size": 1,
+        "backtracking_config": backtracking_config,
+        "logger": logger,
+        "device": DEVICE,
+    }
+
+    lm = BacktrackingLM.create_from_arg_obj(model_args)
+
     for strategy_cls in DECISION_STRATEGIES:
         strategy_name = strategy_cls.__name__
         logger.info("Evaluating strategy: %s", strategy_name)
 
         try:
-            strategy_instance = strategy_cls()
-
-            backtracking_config = inference.BacktrackingInferenceConfig(
-                max_answer_length=64,
-                top_k=50,
-                temperature=1.0,
-                backtrack_every_n=BACKTRACK_EVERY_N,
-                backtrack_strategy=strategy_instance,
-                device=DEVICE)
-
-            model_args = {
-                "pretrained": MODEL_NAME,
-                "backtracking_config": backtracking_config,
-                "logger": logger,
-            }
+            lm.backtracking_config.backtrack_strategy = strategy_cls()
 
             results = _run_evaluation(
                 logger,
-                model_name="backtracking_llm",
-                model_args=model_args,
+                lm=lm,
+                model_args=None,
                 task_names=[TASK_NAME],
                 num_fewshot=NUM_FEWSHOT,
                 limit=LIMIT_FOR_SEARCH,

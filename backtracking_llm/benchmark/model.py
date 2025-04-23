@@ -20,11 +20,12 @@ class BacktrackingLM(huggingface.HFLM):
             config=backtracking_config,
             logger=self.logger)
 
-        self.model_name_or_path = pretrained
         kwargs["pretrained"] = self.engine.model
         kwargs["tokenizer"] = self.engine.tokenizer
 
         super().__init__(**kwargs)
+
+        self.pretrained = pretrained
 
         self.logger.info(
             "Initialized BacktrackingLM with engine using config: "

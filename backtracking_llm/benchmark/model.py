@@ -77,7 +77,7 @@ class BacktrackingLM(huggingface.HFLM):
             if stop_seq:
                 decoded = self._apply_stop_sequences(decoded, stop_seq)
 
-            return decoded.strip()
+            return decoded
         except Exception as e:
             self.logger.error(
                 "Error during backtracking generation for context"

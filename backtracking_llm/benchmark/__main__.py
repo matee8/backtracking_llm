@@ -39,18 +39,21 @@ class BacktrackingLM(huggingface.HFLM):
     def __init__(self,
                  backtracking_config: inference.BacktrackingInferenceConfig,
                  logger: logging.Logger, **kwargs) -> None:
-        super().__init__(**kwargs)
-
         self.backtracking_config = backtracking_config
         self.logger = logger
 
+        self.pretrained = kwargs["pretrained"]
         self.engine = self._setup_engine()
+
+        model_name = kwargs["pretrained"]
+        kwargs["pretrained"] = self.engine.model
+        super().__init__(**kwargs)
+        self.pretrained = model_name
+
         logger.info("Initialized BacktrackingLM with engine using config: %s",
                     backtracking_config)
 
     def _setup_engine(self) -> inference.BacktrackingInferenceEngine:
-        self.backtracking_config.device = str(self.device)
-
         try:
             if not isinstance(self.pretrained, str):
                 raise TypeError("Model's pretrained field is a model instead "

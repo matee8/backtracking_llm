@@ -1,388 +1,123 @@
 #!/usr/bin/env python3
 
+import argparse
 import logging
-import json
-import os
-import time
-import typing
+import pathlib
 import sys
 
-import lm_eval
-from lm_eval.models import huggingface
-from lm_eval.api import instance, registry, model
-
-from backtracking_llm.models import inference, decision
-
-MODEL_NAME: typing.Final[str] = "Qwen/Qwen2.5-0.5B-Instruct"
-TASK_NAME: typing.Final[str] = "hendrycks_math_algebra"
-NUM_FEWSHOT: typing.Final[int] = 8
-LIMIT_FOR_SEARCH: typing.Final[int] = 1
-BACKTRACK_EVERY_N: typing.Final[int] = 5
-OUTPUT_DIR: typing.Final[str] = "benchmark_results"
-DEVICE: typing.Final[str] = "cpu"
-DECISION_STRATEGIES: (
-    typing.Final[list[typing.Type[decision.BacktrackStrategy]]]) = [
-        decision.ProbabilityThreshold,
-        decision.EntropyThreshold,
-        decision.ProbabilityMargin,
-        decision.ProbabilityDrop,
-        decision.ProbabilityTrend,
-        decision.Repetition,
-        decision.NGramOverlap,
-        decision.LogitThreshold,
-    ]
-
-
-@registry.register_model("backtracking_llm")
-class BacktrackingLM(huggingface.HFLM):
-
-    def __init__(self,
-                 backtracking_config: inference.BacktrackingInferenceConfig,
-                 logger: logging.Logger, **kwargs) -> None:
-        self.backtracking_config = backtracking_config
-        self.logger = logger
-
-        self.pretrained = kwargs["pretrained"]
-        self.engine = self._setup_engine()
-
-        model_name = kwargs["pretrained"]
-        kwargs["pretrained"] = self.engine.model
-        super().__init__(**kwargs)
-        self.pretrained = model_name
-
-        logger.info("Initialized BacktrackingLM with engine using config: %s",
-                    backtracking_config)
-
-    def _setup_engine(self) -> inference.BacktrackingInferenceEngine:
-        try:
-            if not isinstance(self.pretrained, str):
-                raise TypeError("Model's pretrained field is a model instead "
-                                "of a string")
-
-            engine = inference.BacktrackingInferenceEngine(
-                model_name=self.pretrained,
-                logger=self.logger,
-                config=self.backtracking_config)
-
-            return engine
-        except Exception:
-            self.logger.error("Failed to initialize "
-                              "BacktrackingInferenceEngine")
-            raise
-
-    def generate_until(self,
-                       /,
-                       requests: list[instance.Instance],
-                       disable_tqdm: bool = False) -> list[str]:
-        self.logger.debug("Received %d generation requests.", len(requests))
-
-        results = []
-
-        for req in requests:
-            args = req.args
-
-            if args is None or len(args) == 0:
-                self.logger.warning("Instance does not contain any arguments.")
-                results.append("Generation error")
-                continue
-
-            context = args[0]
-            if len(args) > 1:
-                stop_sequences = args[1].get("until", None)
-            else:
-                stop_sequences = None
-
-            if not isinstance(args[0], str):
-                self.logger.warning("Context is not of type 'str'. Skipping.")
-                results.append("Generation error")
-                continue
-
-            try:
-                self.logger.debug("Generating for context: '%s...'",
-                                  context[:50])
-
-                token_ids = self.engine.generate(context, None)
-                if token_ids is None:
-                    self.logger.warning("Model did not return any generated "
-                                        "text. Skipping.")
-                    results.append("Generation error")
-                    continue
-
-                decoded = self.tokenizer.decode(token_ids[0])[len(context):]
-
-                if stop_sequences:
-                    for seq in stop_sequences:
-                        index = decoded.find(seq)
-                        if index != -1:
-                            decoded = decoded[:index]
-                            self.logger.debug("Stopped at sequence: %s.", seq)
-
-                self.logger.debug("Raw generated text: '%s...'", decoded[:50])
-
-                results.append(decoded.strip())
-            except Exception:
-                self.logger.error(
-                    "Error during generation for context '%s...'",
-                    context[:50])
-                results.append("Generation error")
-
-        return results
-
-
-def _run_evaluation(
-        logger: logging.Logger,
-        lm: str | model.LM,
-        model_args: dict[str, typing.Any] | None,
-        task_names: list[str | dict | object],
-        num_fewshot: int,
-        limit: int | None = None,
-        description: str = "eval",
-        output_filename: str | None = None,
-        bootstrap_iters: int = 1000) -> dict[str, typing.Any] | None:
-    if isinstance(lm, str):
-        model_name = lm
-        if model_args is None:
-            raise ValueError("model_args cannot be None if model isn't "
-                             "initialized")
-    else:
-        if hasattr(lm, "pretrained"):
-            model_name = lm.pretrained
-        else:
-            logger.warning("LM has no 'pretrained' field. Can't get name "
-                           "of model.")
-            model_name = None
-
-    start_time = time.time()
-    logger.info(
-        "Starting evaulation: %s - Model: %s, Tasks: %s, Limit: %s, "
-        "Fewshot: %d", description, model_name, task_names, limit, num_fewshot)
-
-    if model_args is None:
-        model_args = {}
-        model_args["device"] = DEVICE
-    else:
-        model_args["device"] = DEVICE
-
-    try:
-        if isinstance(lm, str):
-            results = lm_eval.simple_evaluate(model=lm,
-                                              model_args=model_args,
-                                              tasks=task_names,
-                                              num_fewshot=num_fewshot,
-                                              limit=limit,
-                                              bootstrap_iters=bootstrap_iters)
-        else:
-            results = lm_eval.simple_evaluate(model=lm,
-                                              tasks=task_names,
-                                              num_fewshot=num_fewshot,
-                                              limit=limit,
-                                              bootstrap_iters=bootstrap_iters)
-
-        if results is None:
-            raise ValueError("Simple evaluate returned None.")
-
-        end_time = time.time()
-
-        results["config"]["eval_details"] = {
-            "description": description,
-            "duration_seconds": end_time - start_time,
-            "limit": limit,
-            "num_fewshot": num_fewshot,
-            "tasks": task_names,
-            "model_type": model_name,
-            "model_args": {
-                k: str(v)
-                for k, v in model_args.items()
-            }
-        }
-
-        if output_filename is None:
-            timestamp = time.strftime("%Y%m%d-%H%M%S")
-            desc = "".join(c if c.isalnum() else "_" for c in description)
-            output_filename = f"{desc}{timestamp}.json"
-
-        output_path = os.path.join(OUTPUT_DIR, output_filename)
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump([results["results"], results["samples"]], f, indent=4)
-
-        logger.info("Evaluation %s finished in %.2f seconds.", description,
-                    end_time - start_time)
-        logger.info("Results saved to: %s.", output_path)
-        logger.info("Results summary:\n%s",
-                    json.dumps(results["results"], indent=2))
-
-        return results
-    except Exception as e:
-        logger.error("Evaluation %s failed: %s", description, e, exc_info=True)
-
-        error_info = {
-            "error": str(e),
-            "config": {
-                "description": description,
-                "limit": limit,
-                "num_fewshot": num_fewshot,
-                "tasks": task_names,
-                "model_type": model_name,
-                "model_args": {
-                    k: str(v)
-                    for k, v in model_args.items()
-                }
-            }
-        }
-
-        output_path = os.path.join(OUTPUT_DIR, f"ERROR_{description}.json")
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(error_info, f, indent=4)
-
-        return None
+from backtracking_llm.benchmark import config, runner
 
 
 def _setup_logger() -> logging.Logger:
-    log_level = logging.DEBUG
-
+    level = logging.DEBUG
     log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
-
     handler = logging.StreamHandler(sys.stdout)
-
-    logging.basicConfig(level=log_level,
+    logging.basicConfig(level=level,
                         format=log_format,
                         handlers=[handler],
                         force=True)
-
     return logging.getLogger(__name__)
 
 
-def _main() -> None:
+def _parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="benchmark base vs backtracking language models",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument("--model-name",
+                        type=str,
+                        default="Qwen/Qwen2.5-0.5B-Instruct",
+                        desc="name of the model to run benchmarks with")
+
+    parser.add_argument("--task-names",
+                        type=list[str],
+                        default=["hendrycks_math_algebra"],
+                        desc="list of evaluation tasks")
+
+    parser.add_argument("--fewshot",
+                        type=int,
+                        default=8,
+                        desc="number of examples in a few-shot context")
+
+    parser.add_argument("--backtrack-every-n",
+                        type=int,
+                        default=5,
+                        desc="count of tokens between calling backtracking"
+                        "decision function.")
+
+    parser.add_argument("--output-dir",
+                        type=pathlib.Path,
+                        default=pathlib.Path("benchmark_results"),
+                        desc="directory which results will be saved to")
+
+    parser.add_argument("--device",
+                        type=str,
+                        default="cpu",
+                        desc="device which benchmarks will run on")
+
+    parser.add_argument("--baseline-limit",
+                        type=int | None,
+                        default=None,
+                        desc="limit of instances passed to the baseline "
+                        "evaluation")
+
+    parser.add_argument("--search-limit",
+                        type=int | None,
+                        default=500,
+                        desc="limit of instances passed to the best strategy "
+                        "evaluation")
+
+    parser.add_argument("--final-limit",
+                        type=int,
+                        default=None,
+                        desc="limit of instances passed to the best strategy "
+                        "evaluation")
+
+    parser.add_argument(
+        "--max-answer-length",
+        type=int,
+        default=64,
+        desc="max length of the generated answer by bactracking"
+        " model in evaluation")
+
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=50,
+        help="controls the sampling strategy by limiting the "
+        "next token prediction pool to the k most likely tokens")
+
+    parser.add_argument("--temperature",
+                        type=float,
+                        default=1.0,
+                        help="controls the creativity or randomness of the "
+                        "generated text")
+
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = _parse_arguments()
     logger = _setup_logger()
 
-    logger.info("Starting benchmarking pipeline.")
-    logger.info("Step 1: Running baseline evaluation (no backtracking).")
+    benchmark_config = config.BenchmarkConfig(
+        model_name=args.model_name,
+        task_names=args.task_names,
+        fewshot=args.fewshot,
+        backtrack_every_n=args.backtrack_every_n,
+        output_dir=args.output_dir,
+        device=args.device,
+        baseline_limit=args.baseline_limit,
+        search_limit=args.search_limit,
+        final_limit=args.final_limit,
+        backtracking_max_answer_length=args.max_answer_length,
+        backtracking_top_k=args.top_k,
+        backtracking_temperature=args.temperature)
 
-    baseline_model_args = {
-        "pretrained": MODEL_NAME,
-        "batch_size": 1,
-        "device": DEVICE
-    }
+    benchmark_runner = runner.BenchmarkRunner(benchmark_config, logger)
 
-    baseline_results = _run_evaluation(
-        logger,
-        lm="hf",
-        model_args=baseline_model_args,
-        task_names=[TASK_NAME],
-        num_fewshot=NUM_FEWSHOT,
-        limit=1,
-        description="baseline_full_dataset",
-        output_filename="results_baseline_full.json")
-
-    if baseline_results is None:
-        logger.error("Baseline evaluation failed. Aborting pipeline.")
-        return
-
-    try:
-        score = (baseline_results["results"][TASK_NAME].get(
-            "acc_norm,none",
-            baseline_results["results"][TASK_NAME].get("acc,none")))
-
-        if score is None:
-            score = (
-                baseline_results["results"][TASK_NAME].get("exact_match,none"))
-
-        if score is None:
-            raise KeyError("Could not find standard accuracy metric "
-                           "(acc_norm, acc or exact_match).")
-
-        logger.info("Baseline %s Accuracy (acc_norm/acc/exact_match): %.4f",
-                    TASK_NAME, score)
-    except (KeyError, StopIteration) as e:
-        logger.warning(
-            "Could not extract baseline primary score "
-            "automatically: %s", e)
-        score = None
-
-    logger.info("Step 2: Comparing decision strategies.")
-    strategy_results = {}
-    best_strategy_cls = None
-    best_strategy_score = -1.0
-
-    if not DECISION_STRATEGIES:
-        raise ValueError("No decision strategies defined in "
-                         "DECISION_STRATEGIES.")
-
-    backtracking_config = inference.BacktrackingInferenceConfig(
-        max_answer_length=64,
-        top_k=50,
-        temperature=1.0,
-        backtrack_every_n=BACKTRACK_EVERY_N,
-        device=DEVICE)
-
-    model_args = {
-        "pretrained": MODEL_NAME,
-        "batch_size": 1,
-        "backtracking_config": backtracking_config,
-        "logger": logger,
-        "device": DEVICE,
-    }
-
-    lm = BacktrackingLM.create_from_arg_obj(model_args)
-
-    for strategy_cls in DECISION_STRATEGIES:
-        strategy_name = strategy_cls.__name__
-        logger.info("Evaluating strategy: %s", strategy_name)
-
-        try:
-            lm.backtracking_config.backtrack_strategy = strategy_cls()
-
-            results = _run_evaluation(
-                logger,
-                lm=lm,
-                model_args=None,
-                task_names=[TASK_NAME],
-                num_fewshot=NUM_FEWSHOT,
-                limit=LIMIT_FOR_SEARCH,
-                description=f"strategy_comparison_{strategy_name}",
-                output_filename=(f"results_strategy_{strategy_name}_limit_"
-                                 f"{LIMIT_FOR_SEARCH}.json"))
-
-            if not results:
-                logger.error("Strategy evaluation failed. Aborting pipeline.")
-                return
-
-            strategy_results[strategy_name] = results
-
-            try:
-                score = (results["results"][TASK_NAME].get(
-                    "acc_norm,none",
-                    results["results"][TASK_NAME].get("acc,none")))
-
-                if score is None:
-                    score = (
-                        results["results"][TASK_NAME].get("exact_match,none"))
-
-                if score is None:
-                    raise KeyError("Could not find standard accuracy metric "
-                                   "(acc_norm, acc or exact_match).")
-
-                logger.info("Strategy %s score: %.4f", strategy_name, score)
-
-                if score > best_strategy_score:
-                    best_strategy_score = score
-                    best_strategy_cls = strategy_cls
-                    logger.info("New best strategy found.")
-            except (KeyError, StopIteration) as e:
-                logger.warning(
-                    "Could not extract strategy primary score "
-                    "automatically: %s", e)
-
-        except Exception:
-            logger.error("Failed to evaluate strategy: %s", strategy_name)
-
-    if best_strategy_cls:
-        logger.info("\nBest initial strategy: %s with score %.4f",
-                    best_strategy_cls.__name__, best_strategy_score)
+    benchmark_runner.run()
 
 
 if __name__ == "__main__":
-    _main()
+    main()

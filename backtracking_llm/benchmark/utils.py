@@ -29,14 +29,3 @@ def _save_json(data: typing.Any, path: pathlib.Path) -> None:
 
     with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
-
-
-def _setup_logger() -> logging.Logger:
-    level = logging.DEBUG
-    log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
-    handler = logging.StreamHandler(sys.stdout)
-    logging.basicConfig(level=level,
-                        format=log_format,
-                        handlers=[handler],
-                        force=True)
-    return logging.getLogger(__name__)

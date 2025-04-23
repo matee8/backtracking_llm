@@ -115,14 +115,16 @@ class Evaluator:
                 tasks=self.config.task_names,
                 num_fewshot=self.config.fewshot,
                 limit=limit,
-                bootstrap_iters=self.config.bootstrap_iters)
+                bootstrap_iters=self.config.bootstrap_iters,
+                confirm_run_unsafe_code=True)
         else:
             return lm_eval.simple_evaluate(
                 model=lm,
                 tasks=self.config.task_names,
                 num_fewshot=self.config.fewshot,
                 limit=limit,
-                bootstrap_iters=self.config.bootstrap_iters)
+                bootstrap_iters=self.config.bootstrap_iters,
+                confirm_run_unsafe_code=True)
 
     def _process_results(self, results: dict[str, typing.Any],
                          description: str, start_time: float, end_time: float,

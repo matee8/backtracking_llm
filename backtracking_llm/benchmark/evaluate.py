@@ -24,7 +24,7 @@ class Evaluator:
         lm_name = self._get_model_name(lm, model_args)
 
         self.logger.info(
-            "Starting evaluation 's' - Model: %s, Tasks: %s, "
+            "Starting evaluation '%s' - Model: %s, Tasks: %s, "
             "Fewshot: %s, Limit: %s", description, lm_name,
             self.config.task_names, self.config.fewshot, limit)
 
@@ -148,12 +148,10 @@ class Evaluator:
 
     def _save_results(self, results: dict[str, typing.Any], description: str,
                       output_filename: str | None) -> pathlib.Path:
-        output_data = [
-            results["results"], results["samples"], results["config"]
-        ]
+        output_data = [results["results"], results["samples"]]
 
         if output_filename is None:
-            timestamp = time.strftime("%Y%m%d-%H%M%D")
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
             output_path = (self.config.output_dir /
                            f"{description}_{timestamp}.json")
         else:
@@ -165,7 +163,7 @@ class Evaluator:
 
     def _handle_error(self, error: Exception, description: str,
                       limit: int | None, lm_name: str | None) -> None:
-        timestamp = time.strftime("%Y%m%d-%H%M%D")
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
 
         error_info = {
             "error_message": str(error),

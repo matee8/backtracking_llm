@@ -29,7 +29,7 @@ class BenchmarkConfig:
             decision.NGramOverlap,
             decision.LogitThreshold,
         ]))
-    backtracking_max_answer_length: int = 64
-    backtracking_top_k: int = 50
-    backtracking_temperature: float = 1.0
+    backtrack_max_answer_length: int = 64
+    backtrack_top_k: int = 50
+    backtrack_temperature: float = 1.0
     bootstrap_iters: int = 1000

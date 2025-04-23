@@ -27,57 +27,57 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument("--model-name",
                         type=str,
                         default="Qwen/Qwen2.5-0.5B-Instruct",
-                        desc="name of the model to run benchmarks with")
+                        help="name of the model to run benchmarks with")
 
     parser.add_argument("--task-names",
                         type=list[str],
                         default=["hendrycks_math_algebra"],
-                        desc="list of evaluation tasks")
+                        help="list of evaluation tasks")
 
     parser.add_argument("--fewshot",
                         type=int,
                         default=8,
-                        desc="number of examples in a few-shot context")
+                        help="number of examples in a few-shot context")
 
     parser.add_argument("--backtrack-every-n",
                         type=int,
                         default=5,
-                        desc="count of tokens between calling backtracking"
+                        help="count of tokens between calling backtracking"
                         "decision function.")
 
     parser.add_argument("--output-dir",
                         type=pathlib.Path,
                         default=pathlib.Path("benchmark_results"),
-                        desc="directory which results will be saved to")
+                        help="directory which results will be saved to")
 
     parser.add_argument("--device",
                         type=str,
                         default="cpu",
-                        desc="device which benchmarks will run on")
+                        help="device which benchmarks will run on")
 
     parser.add_argument("--baseline-limit",
-                        type=int | None,
+                        type=int,
                         default=None,
-                        desc="limit of instances passed to the baseline "
+                        help="limit of instances passed to the baseline "
                         "evaluation")
 
     parser.add_argument("--search-limit",
-                        type=int | None,
+                        type=int,
                         default=500,
-                        desc="limit of instances passed to the best strategy "
+                        help="limit of instances passed to the best strategy "
                         "evaluation")
 
     parser.add_argument("--final-limit",
                         type=int,
                         default=None,
-                        desc="limit of instances passed to the best strategy "
+                        help="limit of instances passed to the best strategy "
                         "evaluation")
 
     parser.add_argument(
         "--max-answer-length",
         type=int,
         default=64,
-        desc="max length of the generated answer by bactracking"
+        help="max length of the generated answer by bactracking"
         " model in evaluation")
 
     parser.add_argument(
@@ -110,9 +110,9 @@ def main() -> None:
         baseline_limit=args.baseline_limit,
         search_limit=args.search_limit,
         final_limit=args.final_limit,
-        backtracking_max_answer_length=args.max_answer_length,
-        backtracking_top_k=args.top_k,
-        backtracking_temperature=args.temperature)
+        backtrack_max_answer_length=args.max_answer_length,
+        backtrack_top_k=args.top_k,
+        backtrack_temperature=args.temperature)
 
     benchmark_runner = runner.BenchmarkRunner(benchmark_config, logger)
 

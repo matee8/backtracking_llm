@@ -75,9 +75,9 @@ class BenchmarkRunner:
             raise ValueError("No decision strategies defined in config")
 
         base_config = inference.BacktrackingInferenceConfig(
-            max_answer_length=self.config.backtracking_max_answer_length,
-            top_k=self.config.backtracking_top_k,
-            temperature=self.config.backtracking_temperature,
+            max_answer_length=self.config.backtrack_max_answer_length,
+            top_k=self.config.backtrack_top_k,
+            temperature=self.config.backtrack_temperature,
             backtrack_every_n=self.config.backtrack_every_n,
             device=self.config.device)
 
@@ -101,7 +101,7 @@ class BenchmarkRunner:
             self.logger.info("Evaluating strategy: %s", strategy_name)
 
             try:
-                lm.config.backtracking_strategy = strategy_cls()
+                lm.engine.config.backtrack_strategy = strategy_cls()
 
                 desc = f"strategy_search_{strategy_name}"
                 filename = f"results_{desc}_limit_{limit}.json"

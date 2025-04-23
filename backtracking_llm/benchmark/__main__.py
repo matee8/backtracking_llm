@@ -30,7 +30,8 @@ def _parse_arguments() -> argparse.Namespace:
                         help="name of the model to run benchmarks with")
 
     parser.add_argument("--task-names",
-                        type=list[str],
+                        nargs="+",
+                        type=str,
                         default=["hendrycks_math_algebra"],
                         help="list of evaluation tasks")
 

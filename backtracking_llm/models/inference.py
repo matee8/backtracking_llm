@@ -134,7 +134,7 @@ class BacktrackingInferenceEngine:
 
                 if (step + 1) % self.config.backtrack_every_n == 0:
                     num = self._handle_backtrack(generated_count=step,
-                                                 logits=logits,
+                                                 logits=logits[0],
                                                  probabilities=probs,
                                                  rel_idx=rel_idx,
                                                  token_id=token_id)

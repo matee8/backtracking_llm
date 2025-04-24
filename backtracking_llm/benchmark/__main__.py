@@ -4,8 +4,27 @@ import argparse
 import logging
 import pathlib
 import sys
+import typing
 
 from backtracking_llm.benchmark import config, runner
+from backtracking_llm.models import decision
+
+DECISION_MAP: typing.Final[dict[str,
+                                typing.Type[decision.BacktrackStrategy]]] = {
+                                    "probability_threshold":
+                                    decision.ProbabilityThreshold,
+                                    "entropy_threshold":
+                                    decision.EntropyThreshold,
+                                    "probability_margin":
+                                    decision.ProbabilityMargin,
+                                    "probability_drop":
+                                    decision.ProbabilityDrop,
+                                    "probability_trend":
+                                    decision.ProbabilityTrend,
+                                    "repetition": decision.Repetition,
+                                    "ngram_overlap": decision.NGramOverlap,
+                                    "logit_threshold": decision.LogitThreshold,
+                                }
 
 
 def _setup_logger() -> logging.Logger:
@@ -98,6 +117,11 @@ def _parse_arguments() -> argparse.Namespace:
                         action="store_true",
                         help="skip baseline model benchmarking")
 
+    parser.add_argument("--decision-functions",
+                        nargs="+",
+                        help="the name of the decision function to use",
+                        choices=DECISION_MAP.keys())
+
     return parser.parse_args()
 
 
@@ -119,6 +143,12 @@ def main() -> None:
         max_answer_length=args.max_answer_length,
         top_k=args.top_k,
         temperature=args.temperature)
+
+    if args.decision_functions is not None:
+        benchmark_config.decision_strategies = []
+        for decision_strategy in args.decision_functions:
+            benchmark_config.decision_strategies.append(
+                DECISION_MAP[decision_strategy])
 
     benchmark_runner = runner.BenchmarkRunner(benchmark_config, logger)
 

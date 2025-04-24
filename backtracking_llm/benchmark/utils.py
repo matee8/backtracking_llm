@@ -3,8 +3,8 @@ import pathlib
 import typing
 
 
-def _extract_primary_score(results: dict[str, typing.Any],
-                           task_name: str) -> float:
+def extract_primary_score(results: dict[str, typing.Any],
+                          task_name: str) -> float:
     if not results:
         raise ValueError("'results' cannot be None")
 
@@ -22,7 +22,7 @@ def _extract_primary_score(results: dict[str, typing.Any],
     raise KeyError("No standard accuracy metric found in 'task_results'.")
 
 
-def _save_json(data: typing.Any, path: pathlib.Path) -> None:
+def save_json(data: typing.Any, path: pathlib.Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8") as f:

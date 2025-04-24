@@ -5,7 +5,7 @@ import typing
 from backtracking_llm.models import decision
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class BenchmarkConfig:
     model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"
     task_names: list[str | dict | object] = (dataclasses.field(

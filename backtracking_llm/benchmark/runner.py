@@ -68,7 +68,7 @@ class BenchmarkRunner:
         for task in self.config.task_names:
             if isinstance(task, str):
                 try:
-                    score = utils._extract_primary_score(
+                    score = utils.extract_primary_score(
                         results["results"], task)
                     self.logger.info("Baseline accuracy: %.4f", score)
                 except Exception as e:
@@ -130,7 +130,7 @@ class BenchmarkRunner:
                 for task in self.config.task_names:
                     if isinstance(task, str):
                         try:
-                            score = utils._extract_primary_score(
+                            score = utils.extract_primary_score(
                                 results["results"], task)
 
                             self.logger.info("Strategy %s accuracy: %.4f",

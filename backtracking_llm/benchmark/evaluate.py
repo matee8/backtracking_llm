@@ -174,7 +174,7 @@ class Evaluator:
         else:
             output_path = self.config.output_dir / output_filename
 
-        utils._save_json(output_data, output_path)
+        utils.save_json(output_data, output_path)
 
         return output_path
 
@@ -198,5 +198,5 @@ class Evaluator:
         error_path = (self.config.output_dir /
                       f"ERROR_{safe_desc}_{timestamp}.json")
 
-        utils._save_json(error_info, error_path)
+        utils.save_json(error_info, error_path)
         self.logger.info("Error details saved to: %s.", error_path)

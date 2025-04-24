@@ -153,12 +153,6 @@ class BacktrackingInferenceEngine:
 
                         continue
 
-                if (self.tokenizer.eos_token_id is not None
-                        and token_id.item() == self.tokenizer.eos_token_id):
-                    self.logger.debug("EOS at step %d; stopping.", step)
-                    _send_event(GenerationEventType.END, None)
-                    break
-
                 try:
                     decoded = self.tokenizer.decode(token_id.item(),
                                                     skip_special_tokens=True)
@@ -171,27 +165,23 @@ class BacktrackingInferenceEngine:
                     decoded = None
 
                 generated = torch.cat([generated, token_id.view(1, 1)], dim=-1)
+                current = token_id.view(1, 1)
 
-                should_stop = False
-
-                if stop_tokens is not None:
-                    for stop in stop_tokens:
-                        if generated[0, -len(stop):].tolist() == stop:
-                            should_stop = True
-
-                            self.logger.debug(
-                                "Stop criteria reached; stopping")
-
-                            _send_event(GenerationEventType.END, None)
-
-                            generated = generated[:, :-len(stop)]
-
-                            break
-
-                if should_stop:
+                if self._check_eos_token(token_id):
+                    self.logger.debug("EOS at step %d; stopping.", step)
+                    _send_event(GenerationEventType.END, None)
                     break
 
-                current = token_id.view(1, 1)
+                if stop_tokens is not None:
+                    stop_criteria_len = self._check_stop_criteria(
+                        stop_tokens, generated)
+                    if stop_criteria_len > 0:
+                        self.logger.debug("Stop criteria reached; stopping.")
+                        _send_event(GenerationEventType.END, None)
+
+                        generated = generated[:, :-stop_criteria_len]
+
+                        break
 
             if generated is None or generated.shape[1] <= input_ids.shape[1]:
                 self.logger.warning("Generation stopped early or failed. "
@@ -439,3 +429,16 @@ class BacktrackingInferenceEngine:
                               e,
                               exc_info=True)
             return None
+
+    def _check_eos_token(self, token_id: torch.Tensor) -> int:
+        return (self.tokenizer.eos_token_id is not None
+                and token_id.item() == self.tokenizer.eos_token_id)
+
+    def _check_stop_criteria(self, stop_tokens: list[list[int]],
+                             generated: torch.Tensor) -> int:
+        if stop_tokens is not None:
+            for stop in stop_tokens:
+                if generated[0, -len(stop):].tolist() == stop:
+                    return len(stop)
+
+        return 0

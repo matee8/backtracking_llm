@@ -1,5 +1,6 @@
 import logging
 
+import tqdm
 from lm_eval.api import instance, registry
 from lm_eval.models import huggingface
 
@@ -38,7 +39,12 @@ class BacktrackingLM(huggingface.HFLM):
 
         results = []
 
-        for req in requests:
+        if disable_tqdm:
+            iterator = requests
+        else:
+            iterator = tqdm.tqdm(requests, "Running generate_until requests:")
+
+        for req in iterator:
             result = self._process_request(req)
             results.append(result)
 

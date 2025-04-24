@@ -28,7 +28,7 @@ DECISION_MAP: typing.Final[dict[str,
 
 
 def _setup_logger() -> logging.Logger:
-    level = logging.DEBUG
+    level = logging.INFO
     log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
     handler = logging.StreamHandler(sys.stdout)
     logging.basicConfig(level=level,

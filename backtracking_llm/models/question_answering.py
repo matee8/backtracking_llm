@@ -123,7 +123,7 @@ class ChatSession:
     def _process_conversation_turn(self) -> None:
         prompt_ids = self._prepare_prompt()
 
-        generated_ids = self.engine.generate(prompt_ids, self.output_fn)
+        generated_ids = self.engine.generate(prompt_ids, self.output_fn, None)
         if generated_ids is None:
             raise ChatError("Model generation did not return valid output.")
 

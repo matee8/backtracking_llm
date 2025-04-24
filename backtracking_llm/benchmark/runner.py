@@ -1,8 +1,6 @@
 import logging
 import typing
 
-from lm_eval.models import huggingface
-
 from backtracking_llm.benchmark import config, evaluate, model, utils
 from backtracking_llm.models import decision, inference
 

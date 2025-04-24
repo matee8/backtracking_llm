@@ -63,7 +63,7 @@ class BacktrackingLM(huggingface.HFLM):
 
         self.logger.debug("Generating for context: '%s...'", context[:50])
         try:
-            token_ids = self.engine.generate(context, None)
+            token_ids = self.engine.generate(context, None, stop_seq)
             if token_ids is None:
                 self.logger.warning("Engine returned no tokens.")
                 return error_msg
@@ -74,9 +74,6 @@ class BacktrackingLM(huggingface.HFLM):
             self.logger.debug("Raw generated text (before stop seq): '%s...'",
                               decoded[:50])
 
-            if stop_seq:
-                decoded = self._apply_stop_sequences(decoded, stop_seq)
-
             return decoded
         except Exception as e:
             self.logger.error(
@@ -86,13 +83,3 @@ class BacktrackingLM(huggingface.HFLM):
                 e,
                 exc_info=True)
             return error_msg
-
-    def _apply_stop_sequences(self, text: str,
-                              stop_sequences: list[str]) -> str:
-        for seq in stop_sequences:
-            idx = text.find(seq)
-            if idx != -1:
-                self.logger.debug("Stopping at sequence: %s", seq)
-                return text[:idx]
-
-        return text

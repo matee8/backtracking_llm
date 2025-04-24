@@ -26,10 +26,10 @@ class GenerationEvent:
 class InferenceEngine(typing.Protocol):
     tokenizer: transformers.PreTrainedTokenizer
 
-    def generate(
-        self, prompt: str | torch.Tensor,
-        token_callback: typing.Callable[[GenerationEvent], None] | None
-    ) -> torch.Tensor | None:
+    def generate(self, prompt: str | torch.Tensor,
+                 token_callback: typing.Callable[[GenerationEvent], None]
+                 | None,
+                 stopping_criteria: list[str] | None) -> torch.Tensor | None:
         ...
 
 
@@ -88,10 +88,10 @@ class BacktrackingInferenceEngine:
             self.logger.error("%s: %s", msg, e, exc_info=True)
             raise ModelInitializationError(msg) from e
 
-    def generate(
-        self, prompt: str | torch.Tensor,
-        token_callback: typing.Callable[[GenerationEvent], None] | None
-    ) -> torch.Tensor | None:
+    def generate(self, prompt: str | torch.Tensor,
+                 token_callback: typing.Callable[[GenerationEvent], None]
+                 | None,
+                 stopping_criteria: list[str] | None) -> torch.Tensor | None:
         input_ids: torch.Tensor | None = None
         generated: torch.Tensor | None = None
 
@@ -105,6 +105,13 @@ class BacktrackingInferenceEngine:
                         "Error executing generation callback: %s",
                         e,
                         exc_info=True)
+
+        if stopping_criteria is None:
+            stop_tokens = None
+        else:
+            stop_tokens = []
+            for stop in stopping_criteria:
+                stop_tokens.append(self.tokenizer(stop).input_ids)
 
         try:
             input_ids = self._prepare_input_ids(prompt).to(self.device)
@@ -161,8 +168,29 @@ class BacktrackingInferenceEngine:
                                         token_id.item(), e)
                     _send_event(GenerationEventType.ERROR,
                                 "Failed to decode token.")
+                    decoded = None
 
                 generated = torch.cat([generated, token_id.view(1, 1)], dim=-1)
+
+                should_stop = False
+
+                if stop_tokens is not None:
+                    for stop in stop_tokens:
+                        if generated[0, -len(stop):].tolist() == stop:
+                            should_stop = True
+
+                            self.logger.debug(
+                                "Stop criteria reached; stopping")
+
+                            _send_event(GenerationEventType.END, None)
+
+                            generated = generated[:, :-len(stop)]
+
+                            break
+
+                if should_stop:
+                    break
+
                 current = token_id.view(1, 1)
 
             if generated is None or generated.shape[1] <= input_ids.shape[1]:

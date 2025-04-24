@@ -15,6 +15,7 @@ class BenchmarkConfig:
     batch_size: int = 1
     output_dir: pathlib.Path = pathlib.Path("benchmark_results")
     device: str = "cpu"
+    skip_base: bool = False
     baseline_limit: int | None = None
     search_limit: int | None = 500
     final_limit: int | None = None

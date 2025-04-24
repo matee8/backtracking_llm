@@ -18,10 +18,14 @@ class BenchmarkRunner:
         self.logger.info("Starting benchmarking pipeline.")
 
         self.logger.info("-- Step 1: Running baseline evaluation. --")
-        baseline_results = self._run_baseline()
-        if baseline_results is None:
-            self.logger.error("Baseline evaluation failed. Aborting pipeline.")
-            return
+        if self.config.skip_base:
+            self.logger.info("Skipping due to configuration.")
+        else:
+            baseline_results = self._run_baseline()
+            if baseline_results is None:
+                self.logger.error(
+                    "Baseline evaluation failed. Aborting pipeline.")
+                return
 
         self.logger.info("-- Step 2: Comparing decision strategies. --")
         best_strategy, score = self._run_strategies()

@@ -94,6 +94,10 @@ def _parse_arguments() -> argparse.Namespace:
                         help="controls the creativity or randomness of the "
                         "generated text")
 
+    parser.add_argument("--skip-base",
+                        action="store_true",
+                        help="skip baseline model benchmarking")
+
     return parser.parse_args()
 
 
@@ -108,6 +112,7 @@ def main() -> None:
         backtrack_every_n=args.backtrack_every_n,
         output_dir=args.output_dir,
         device=args.device,
+        skip_base=args.skip_base,
         baseline_limit=args.baseline_limit,
         search_limit=args.search_limit,
         final_limit=args.final_limit,

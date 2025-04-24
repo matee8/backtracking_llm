@@ -27,8 +27,12 @@ DECISION_MAP: typing.Final[dict[str,
                                 }
 
 
-def _setup_logger() -> logging.Logger:
-    level = logging.INFO
+def _setup_logger(verbose: bool = False) -> logging.Logger:
+    if verbose:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
     log_format = "%(asctime)s  - %(name)s - %(levelname)s - %(message)s"
     handler = logging.StreamHandler(sys.stdout)
     logging.basicConfig(level=level,
@@ -122,12 +126,16 @@ def _parse_arguments() -> argparse.Namespace:
                         help="the name of the decision function to use",
                         choices=DECISION_MAP.keys())
 
+    parser.add_argument("--verbose",
+                        action="store_true",
+                        help="print more useful debugging logs")
+
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_arguments()
-    logger = _setup_logger()
+    logger = _setup_logger(args.verbose)
 
     benchmark_config = config.BenchmarkConfig(
         model_name=args.model_name,

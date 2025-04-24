@@ -36,7 +36,14 @@ class BenchmarkRunner:
         model_args = {
             "pretrained": self.config.model_name,
             "batch_size": 1,
-            "device": self.config.device
+            "device": self.config.device,
+        }
+
+        gen_kwargs = {
+            "do_sample": True,
+            "temperature": self.config.temperature,
+            "top_k": self.config.top_k,
+            "top_p": 1.0
         }
 
         desc = f"baseline_{self.config.model_name.replace('/', '_')}"
@@ -52,7 +59,8 @@ class BenchmarkRunner:
                                      model_args=model_args,
                                      limit=limit,
                                      description=desc,
-                                     output_filename=filename)
+                                     output_filename=filename,
+                                     gen_kwargs=gen_kwargs)
 
         if results is None:
             return None
@@ -77,9 +85,9 @@ class BenchmarkRunner:
             raise ValueError("No decision strategies defined in config")
 
         base_config = inference.BacktrackingInferenceConfig(
-            max_answer_length=self.config.backtrack_max_answer_length,
-            top_k=self.config.backtrack_top_k,
-            temperature=self.config.backtrack_temperature,
+            max_answer_length=self.config.max_answer_length,
+            top_k=self.config.top_k,
+            temperature=self.config.temperature,
             backtrack_every_n=self.config.backtrack_every_n,
             device=self.config.device)
 
@@ -112,7 +120,8 @@ class BenchmarkRunner:
                                              model_args=None,
                                              limit=limit,
                                              description=desc,
-                                             output_filename=filename)
+                                             output_filename=filename,
+                                             gen_kwargs=None)
 
                 if not results:
                     self.logger.error("Strategy evaluation failed. Skipping.")

@@ -18,9 +18,11 @@ class Evaluator:
         self.config = benchmark_config
         self.logger = logger
 
-    def run(self, lm: str | model.LM, model_args: dict[str, typing.Any] | None,
-            limit: int | None, description: str,
-            output_filename: str | None) -> dict[str, typing.Any] | None:
+    def run(
+        self, lm: str | model.LM, model_args: dict[str, typing.Any] | None,
+        limit: int | None, description: str, output_filename: str | None,
+        gen_kwargs: dict[str, typing.Any] | None
+    ) -> dict[str, typing.Any] | None:
         lm_name = self._get_model_name(lm, model_args)
 
         self.logger.info(
@@ -35,7 +37,8 @@ class Evaluator:
 
             results = self._execute_evaluation(lm=lm,
                                                model_args=model_args,
-                                               limit=limit)
+                                               limit=limit,
+                                               gen_kwargs=gen_kwargs)
             if results is None:
                 raise ValueError("'lm_eval.simple_evaluate()' returned None")
 
@@ -101,9 +104,19 @@ class Evaluator:
             model_args["device"] = self.config.device
             return model_args
 
-    def _execute_evaluation(self, lm: str | model.LM,
-                            model_args: dict[str, typing.Any] | None,
-                            limit: int | None) -> dict[str, typing.Any] | None:
+    def _execute_evaluation(
+        self, lm: str | model.LM, model_args: dict[str, typing.Any] | None,
+        limit: int | None, gen_kwargs: dict[str, typing.Any] | None
+    ) -> dict[str, typing.Any] | None:
+        if gen_kwargs is None:
+            gen_kwargs_str = None
+        else:
+            gen_kwargs_list = []
+            for key, value in gen_kwargs.items():
+                gen_kwargs_list.append(f"{key}={str(value)}")
+
+            gen_kwargs_str = ",".join(gen_kwargs_list)
+
         if isinstance(lm, str):
             if model_args is None:
                 raise ValueError("'model_args' cannot be None if model isn't "
@@ -116,6 +129,7 @@ class Evaluator:
                 num_fewshot=self.config.fewshot,
                 limit=limit,
                 bootstrap_iters=self.config.bootstrap_iters,
+                gen_kwargs=gen_kwargs_str,
                 confirm_run_unsafe_code=True)
         else:
             return lm_eval.simple_evaluate(
@@ -124,6 +138,7 @@ class Evaluator:
                 num_fewshot=self.config.fewshot,
                 limit=limit,
                 bootstrap_iters=self.config.bootstrap_iters,
+                gen_kwargs=gen_kwargs_str,
                 confirm_run_unsafe_code=True)
 
     def _process_results(self, results: dict[str, typing.Any],

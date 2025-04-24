@@ -56,7 +56,7 @@ def _parse_arguments() -> argparse.Namespace:
                         default="cpu",
                         help="device which benchmarks will run on")
 
-    parser.add_argument("--baseline-limit",
+    parser.add_argument("--base-limit",
                         type=int,
                         default=None,
                         help="limit of instances passed to the baseline "
@@ -113,12 +113,12 @@ def main() -> None:
         output_dir=args.output_dir,
         device=args.device,
         skip_base=args.skip_base,
-        baseline_limit=args.baseline_limit,
+        baseline_limit=args.base_limit,
         search_limit=args.search_limit,
         final_limit=args.final_limit,
-        backtrack_max_answer_length=args.max_answer_length,
-        backtrack_top_k=args.top_k,
-        backtrack_temperature=args.temperature)
+        max_answer_length=args.max_answer_length,
+        top_k=args.top_k,
+        temperature=args.temperature)
 
     benchmark_runner = runner.BenchmarkRunner(benchmark_config, logger)
 

@@ -11,15 +11,14 @@ from backtracking_llm.models import inference
 class BacktrackingLM(huggingface.HFLM):
 
     def __init__(self, pretrained: str,
-                 backtracking_config: inference.BacktrackingInferenceConfig,
+                 backtracking_config: inference.BacktrackConfig,
                  logger: logging.Logger, **kwargs) -> None:
         self.backtracking_config = backtracking_config
         self.logger = logger
 
-        self.engine = inference.BacktrackingInferenceEngine(
-            model_name=pretrained,
-            config=backtracking_config,
-            logger=self.logger)
+        self.engine = inference.BacktrackEngine(model_name=pretrained,
+                                                config=backtracking_config,
+                                                logger=self.logger)
 
         kwargs["pretrained"] = self.engine.model
         kwargs["tokenizer"] = self.engine.tokenizer

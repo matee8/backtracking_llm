@@ -23,7 +23,7 @@ class GenerationEvent:
     data: typing.Any
 
 
-class InferenceEngine(typing.Protocol):
+class Engine(typing.Protocol):
     tokenizer: transformers.PreTrainedTokenizer
 
     def generate(self, prompt: str | torch.Tensor,
@@ -42,7 +42,7 @@ class GenerationError(RuntimeError):
 
 
 @dataclasses.dataclass
-class BacktrackingInferenceConfig:
+class BacktrackConfig:
     max_answer_length: int = 64
     top_k: int = 50
     temperature: float = 1.0
@@ -65,13 +65,13 @@ class BacktrackingInferenceConfig:
             raise ValueError("backtrack_every_n must be at least 1")
 
 
-class BacktrackingInferenceEngine:
+class BacktrackEngine:
 
     def __init__(
         self,
         model_name: str,
         logger: logging.Logger,
-        config: BacktrackingInferenceConfig = BacktrackingInferenceConfig()
+        config: BacktrackConfig = BacktrackConfig()
     ) -> None:
         self.logger = logger
         self.config = config

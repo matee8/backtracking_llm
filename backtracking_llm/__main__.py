@@ -114,7 +114,7 @@ def _main() -> None:
     args = _parse_arguments()
     logger = _setup_logging(args.verbose, args.log_stdout)
 
-    inference_config = inference.BacktrackingInferenceConfig(
+    inference_config = inference.BacktrackConfig(
         max_answer_length=args.max_answer_length,
         top_k=args.top_k,
         temperature=args.temperature,
@@ -123,9 +123,9 @@ def _main() -> None:
         device=args.device)
 
     try:
-        engine = inference.BacktrackingInferenceEngine(model_name=args.model,
-                                                       logger=logger,
-                                                       config=inference_config)
+        engine = inference.BacktrackEngine(model_name=args.model,
+                                           logger=logger,
+                                           config=inference_config)
     except inference.ModelInitializationError as e:
         logger.error("Failed to initialize the model or tokenizer: %s", e)
         logger.error(

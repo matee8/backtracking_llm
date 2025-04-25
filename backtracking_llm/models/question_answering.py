@@ -27,7 +27,7 @@ class ChatSession:
 
     def __init__(
         self,
-        engine: inference.InferenceEngine,
+        engine: inference.Engine,
         logger: logging.Logger,
         input_fn: typing.Callable[[], str] = cli_get_input,
         output_fn: typing.Callable[[inference.GenerationEvent],

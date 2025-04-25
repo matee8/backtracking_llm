@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import logging
 import pathlib
@@ -8,14 +9,22 @@ import lm_eval
 from lm_eval import tasks
 from lm_eval.api import model
 
-from backtracking_llm.benchmark import config, utils
+from backtracking_llm.benchmark import utils
+
+
+@dataclasses.dataclass
+class Config:
+    task_names: list[str | dict | object]
+    fewshot: int
+    bootstrap_iters: int
+    output_dir: pathlib.Path
+    device: str
 
 
 class Evaluator:
 
-    def __init__(self, benchmark_config: config.BenchmarkConfig,
-                 logger: logging.Logger) -> None:
-        self.config = benchmark_config
+    def __init__(self, config: Config, logger: logging.Logger) -> None:
+        self.config = config
         self.logger = logger
 
     def run(
@@ -84,13 +93,17 @@ class Evaluator:
                 return model_args.get("pretrained", lm)
             else:
                 return lm
-        elif hasattr(lm, "pretrained"):
-            if isinstance(lm.pretrained, str):
-                return lm.pretrained
-            elif hasattr(lm.pretrained, "name_or_path"):
-                return lm.pretrained.name_or_path
 
-        raise ValueError("Unknown model name.")
+        pretrained = getattr(lm, "pretrained", None)
+        if pretrained is None:
+            raise ValueError("Unknown model name.")
+
+        if isinstance(pretrained, str):
+            return pretrained
+        elif hasattr(pretrained, "name_or_path"):
+            return pretrained.name_or_path
+        else:
+            raise ValueError("Unknown model name.")
 
     def _prepare_model_args(
             self, lm: str | model.LM,

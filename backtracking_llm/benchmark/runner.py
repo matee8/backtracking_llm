@@ -1,18 +1,44 @@
+import dataclasses
 import logging
 import typing
 
-from backtracking_llm.benchmark import config, evaluate, model, utils
+from backtracking_llm.benchmark import evaluate, model, utils
 from backtracking_llm.models import decision, inference
+
+
+@dataclasses.dataclass
+class Config:
+    model_name: str
+    backtrack_every_n: int
+    batch_size: int
+    device: str
+    skip_base: bool
+    baseline_limit: int | None
+    search_limit: int | None
+    max_answer_length: int
+    top_k: int
+    temperature: float
+    decision_strategies: list[typing.Type[decision.BacktrackStrategy]] = (
+        dataclasses.field(default_factory=lambda: [
+            decision.ProbabilityThreshold,
+            decision.EntropyThreshold,
+            decision.ProbabilityMargin,
+            decision.ProbabilityDrop,
+            decision.ProbabilityTrend,
+            decision.Repetition,
+            decision.NGramOverlap,
+            decision.LogitThreshold,
+        ]))
 
 
 class BenchmarkRunner:
 
-    def __init__(self, benchmark_config: config.BenchmarkConfig,
+    def __init__(self, config: Config, evaluator_config: evaluate.Config,
                  logger: logging.Logger) -> None:
-        self.config = benchmark_config
+        self.config = config
         self.logger = logger
 
-        self.evaluator = evaluate.Evaluator(benchmark_config, logger)
+        self.evaluator = evaluate.Evaluator(evaluator_config, logger)
 
     def run(self) -> None:
         self.logger.info("Starting benchmarking pipeline.")
@@ -28,7 +54,7 @@ class BenchmarkRunner:
                 return
 
         self.logger.info("-- Step 2: Comparing decision strategies. --")
-        best_strategy, score = self._run_strategies()
+        _, _ = self._run_strategies()
 
         self.logger.info("Benchmarking pipeline finished.")
 
@@ -65,7 +91,7 @@ class BenchmarkRunner:
         if results is None:
             return None
 
-        for task in self.config.task_names:
+        for task in self.evaluator.config.task_names:
             if isinstance(task, str):
                 try:
                     score = utils.extract_primary_score(
@@ -127,7 +153,7 @@ class BenchmarkRunner:
                     self.logger.error("Strategy evaluation failed. Skipping.")
                     continue
 
-                for task in self.config.task_names:
+                for task in self.evaluator.config.task_names:
                     if isinstance(task, str):
                         try:
                             score = utils.extract_primary_score(

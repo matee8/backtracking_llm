@@ -6,7 +6,7 @@ import pathlib
 import sys
 import typing
 
-from backtracking_llm.benchmark import config, runner
+from backtracking_llm.benchmark import evaluate, runner
 from backtracking_llm.models import decision
 
 DECISION_MAP: typing.Final[dict[str,
@@ -91,12 +91,6 @@ def _parse_arguments() -> argparse.Namespace:
                         help="limit of instances passed to the best strategy "
                         "evaluation")
 
-    parser.add_argument("--final-limit",
-                        type=int,
-                        default=None,
-                        help="limit of instances passed to the best strategy "
-                        "evaluation")
-
     parser.add_argument(
         "--max-answer-length",
         type=int,
@@ -137,20 +131,22 @@ def main() -> None:
     args = _parse_arguments()
     logger = _setup_logger(args.verbose)
 
-    benchmark_config = config.BenchmarkConfig(
-        model_name=args.model_name,
-        task_names=args.task_names,
-        fewshot=args.fewshot,
-        backtrack_every_n=args.backtrack_every_n,
-        output_dir=args.output_dir,
-        device=args.device,
-        skip_base=args.skip_base,
-        baseline_limit=args.base_limit,
-        search_limit=args.search_limit,
-        final_limit=args.final_limit,
-        max_answer_length=args.max_answer_length,
-        top_k=args.top_k,
-        temperature=args.temperature)
+    evaluator_config = evaluate.Config(task_names=args.task_names,
+                                       fewshot=args.fewshot,
+                                       bootstrap_iters=1000,
+                                       output_dir=args.output_dir,
+                                       device=args.device)
+
+    benchmark_config = runner.Config(model_name=args.model_name,
+                                     backtrack_every_n=args.backtrack_every_n,
+                                     skip_base=args.skip_base,
+                                     baseline_limit=args.base_limit,
+                                     search_limit=args.search_limit,
+                                     max_answer_length=args.max_answer_length,
+                                     top_k=args.top_k,
+                                     temperature=args.temperature,
+                                     batch_size=1,
+                                     device=args.device)
 
     if args.decision_functions is not None:
         benchmark_config.decision_strategies = []
@@ -158,7 +154,8 @@ def main() -> None:
             benchmark_config.decision_strategies.append(
                 DECISION_MAP[decision_strategy])
 
-    benchmark_runner = runner.BenchmarkRunner(benchmark_config, logger)
+    benchmark_runner = runner.BenchmarkRunner(benchmark_config,
+                                              evaluator_config, logger)
 
     benchmark_runner.run()
 

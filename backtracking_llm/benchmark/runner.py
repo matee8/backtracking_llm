@@ -72,7 +72,10 @@ class BenchmarkRunner:
             "top_p": 1.0
         }
 
+        # pylint: disable=inconsistent-quotes
         desc = f"baseline_{self.config.model_name.replace('/', '_')}"
+        # pylint: enable=inconsistent-quotes
+
         limit = self.config.baseline_limit
         if limit is not None:
             desc += f"_limit_{limit}"

@@ -196,12 +196,12 @@ class Repetition:
 
 class NGramOverlap:
 
-    def __init__(self, history: list[int] = [], n: int = 4) -> None:
+    def __init__(self, n: int = 4) -> None:
         if n < 2:
             raise ValueError("n must be greater than 1")
 
         self.n = n
-        self._history = history
+        self._history = []
 
     def should_backtrack(self, logits: torch.Tensor,
                          probabilities: torch.Tensor, rel_idx: torch.Tensor,

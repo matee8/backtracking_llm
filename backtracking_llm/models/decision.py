@@ -1,3 +1,5 @@
+# pylint: disable=unused-argument
+
 import collections
 import typing
 

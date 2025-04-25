@@ -437,8 +437,13 @@ class BacktrackingInferenceEngine:
     def _check_stop_criteria(self, stop_tokens: list[list[int]],
                              generated: torch.Tensor) -> int:
         if stop_tokens is not None:
-            for stop in stop_tokens:
-                if generated[0, -len(stop):].tolist() == stop:
-                    return len(stop)
+            for stop_tok in stop_tokens:
+                current = self.tokenizer.decode(generated[0, -len(stop_tok):],
+                                                skip_special_tokens=True)
+                stop = self.tokenizer.decode(stop_tok,
+                                             skip_special_tokens=True)
+
+                if stop == current:
+                    return len(stop_tok)
 
         return 0

@@ -40,6 +40,7 @@ DEFAULT_SEARCH_LIMIT: typing.Final[int | None] = None
 DEFAULT_MAX_ANSWER_LENGTH: typing.Final[int] = 1024
 DEFAULT_TOP_K: typing.Final[int] = 50
 DEFAULT_TEMPERATURE: typing.Final[float] = 1.0
+DEFAULT_RANDOM_SEARCH_ITERS: typing.Final[int] = 10
 
 BOOTSTRAP_ITERS = 1000
 BATCH_SIZE = 1
@@ -133,6 +134,20 @@ def _parse_arguments() -> argparse.Namespace:
                         action="store_true",
                         help="skip baseline model benchmarking")
 
+    parser.add_argument("--skip-decision",
+                        action="store_true",
+                        help="skip decision function benchmarking")
+
+    parser.add_argument("--skip-hparam-search",
+                        action="store_true",
+                        help="skip hyperparameter search benchmarking")
+
+    parser.add_argument("--random-search-iters",
+                        type=int,
+                        default=DEFAULT_RANDOM_SEARCH_ITERS,
+                        help="number of random search iterations to run "
+                        "for hyperparameter sampling")
+
     parser.add_argument("--decision-functions",
                         nargs="+",
                         help="the name of the decision function to use",
@@ -155,16 +170,20 @@ def main() -> None:
                                        output_dir=args.output_dir,
                                        device=args.device)
 
-    benchmark_config = runner.Config(model_name=args.model_name,
-                                     backtrack_every_n=args.backtrack_every_n,
-                                     skip_base=args.skip_base,
-                                     baseline_limit=args.base_limit,
-                                     search_limit=args.search_limit,
-                                     max_answer_length=args.max_answer_length,
-                                     top_k=args.top_k,
-                                     temperature=args.temperature,
-                                     batch_size=BATCH_SIZE,
-                                     device=args.device)
+    benchmark_config = runner.Config(
+        model_name=args.model_name,
+        backtrack_every_n=args.backtrack_every_n,
+        skip_base=args.skip_base,
+        skip_decision=args.skip_decision,
+        skip_hparam_search=args.skip_hparam_search,
+        baseline_limit=args.base_limit,
+        search_limit=args.search_limit,
+        max_answer_length=args.max_answer_length,
+        top_k=args.top_k,
+        temperature=args.temperature,
+        batch_size=BATCH_SIZE,
+        device=args.device,
+        random_search_iters=args.random_search_iters)
 
     if args.decision_functions is not None:
         benchmark_config.decision_strategies = []

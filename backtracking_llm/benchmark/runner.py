@@ -213,8 +213,6 @@ class BenchmarkRunner:
     def _run_hparam_search(
         self, best_strategy: typing.Type[decision.BacktrackStrategy] | None
     ) -> tuple[dict[str, typing.Any], float]:
-        random.seed()
-
         base_config = inference.BacktrackConfig(
             max_answer_length=self.config.max_answer_length,
             top_k=self.config.top_k,
@@ -239,6 +237,8 @@ class BenchmarkRunner:
         freq_max = max(self.config.backtrack_every_n, 1)
 
         for i in range(self.config.random_search_iters):
+            random.seed()
+
             if best_strategy is None:
                 strategy_cls = random.choice(self.config.decision_strategies)
             else:

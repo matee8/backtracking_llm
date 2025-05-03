@@ -438,12 +438,12 @@ class BacktrackEngine:
                              generated: torch.Tensor) -> int:
         if stop_tokens is not None:
             for stop_tok in stop_tokens:
-                current = self.tokenizer.decode(generated[0, -len(stop_tok):],
+                current = self.tokenizer.decode(generated[0],
                                                 skip_special_tokens=True)
                 stop = self.tokenizer.decode(stop_tok,
                                              skip_special_tokens=True)
 
-                if stop == current:
+                if current.endswith(stop):
                     return len(stop_tok)
 
         return 0

@@ -71,6 +71,7 @@ def _parse_arguments() -> argparse.Namespace:
 
     parser.add_argument("--decision-function",
                         help="the name of the decision function to use",
+                        default="probability_threshold",
                         choices=DECISION_MAP.keys())
 
     parser.add_argument("--device",

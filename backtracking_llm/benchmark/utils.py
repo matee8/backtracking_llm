@@ -13,7 +13,9 @@ def extract_primary_score(results: dict[str, typing.Any],
 
     task_results = results[task_name]
 
-    metric_keys = ["acc_norm,none", "acc,none", "exact_match,none"]
+    metric_keys = [
+        "acc_norm,none", "acc,none", "exact_match,none", "pass@1,create_test"
+    ]
 
     for key in metric_keys:
         if key in task_results:

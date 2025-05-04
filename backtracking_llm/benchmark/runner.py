@@ -113,7 +113,8 @@ class BenchmarkRunner:
                                      limit=limit,
                                      description=desc,
                                      output_filename=filename,
-                                     gen_kwargs=gen_kwargs)
+                                     gen_kwargs=gen_kwargs,
+                                     save=None)
 
         if results is None:
             return None
@@ -174,7 +175,8 @@ class BenchmarkRunner:
                                              limit=limit,
                                              description=desc,
                                              output_filename=filename,
-                                             gen_kwargs=None)
+                                             gen_kwargs=None,
+                                             save=None)
 
                 if not results:
                     self.logger.error("Strategy evaluation failed. Skipping.")
@@ -265,6 +267,8 @@ class BenchmarkRunner:
             desc = f"random_search_{strategy_name}_iter_{i}"
             filename = f"results_{desc}_limit_{self.config.search_limit}.json"
 
+            save = {**hparams, "frequency": freq}
+
             self.logger.info("Iteration %d: eval %s; freq=%d; hparams=%s", i,
                              strategy_name, freq, hparams)
 
@@ -273,7 +277,8 @@ class BenchmarkRunner:
                                          limit=self.config.search_limit,
                                          description=desc,
                                          output_filename=filename,
-                                         gen_kwargs=None)
+                                         gen_kwargs=None,
+                                         save=save)
             if not results:
                 self.logger.error("Iteration %d: evaluation failed, skipping.",
                                   i)

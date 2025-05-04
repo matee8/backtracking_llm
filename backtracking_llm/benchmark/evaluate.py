@@ -27,11 +27,11 @@ class Evaluator:
         self.config = config
         self.logger = logger
 
-    def run(
-        self, lm: str | model.LM, model_args: dict[str, typing.Any] | None,
-        limit: int | None, description: str, output_filename: str | None,
-        gen_kwargs: dict[str, typing.Any] | None
-    ) -> dict[str, typing.Any] | None:
+    def run(self, lm: str | model.LM, model_args: dict[str, typing.Any] | None,
+            limit: int | None, description: str, output_filename: str | None,
+            gen_kwargs: dict[str, typing.Any] | None,
+            save: dict[str, typing.Any] | None
+            ) -> dict[str, typing.Any] | None:
         lm_name = self._get_model_name(lm, model_args)
 
         self.logger.info(
@@ -62,7 +62,7 @@ class Evaluator:
                                                       model_args=prepared_args)
 
             output_path = self._save_results(results, description,
-                                             output_filename)
+                                             output_filename, save)
 
             self.logger.info("Evaluation %s finished in %.2f seconds.",
                              description, end_time - start_time)
@@ -177,8 +177,9 @@ class Evaluator:
         return results
 
     def _save_results(self, results: dict[str, typing.Any], description: str,
-                      output_filename: str | None) -> pathlib.Path:
-        output_data = [results["results"], results["samples"]]
+                      output_filename: str | None,
+                      save: dict[str, typing.Any] | None) -> pathlib.Path:
+        output_data = [results["results"], save, results["samples"]]
 
         if output_filename is None:
             timestamp = time.strftime("%Y%m%d-%H%M%S")

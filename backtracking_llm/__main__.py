@@ -138,11 +138,14 @@ def _main() -> None:
         sys.exit(1)
 
     import time
-    inputs = engine.tokenizer("Artificial intelligence is ", return_tensors="pt").input_ids
+    inputs = engine.tokenizer("Artificial intelligence is ",
+                              return_tensors="pt").input_ids
     start_time = time.time()
     outputs = engine.generate(inputs, None, None)
     end_time = time.time()
-    print(f"Tokens/s: {(outputs.numel() - inputs.numel()) / (end_time - start_time)}")
+    print(
+        f"Tokens/s: {(outputs.numel() - inputs.numel()) / (end_time - start_time)}"
+    )
 
     # chat_session = question_answering.ChatSession(engine=engine, logger=logger)
     # try:

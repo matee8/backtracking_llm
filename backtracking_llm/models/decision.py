@@ -117,6 +117,8 @@ class ProbabilityDrop:
             self._last_chosen_probability = None
             return 0
 
+        self._last_chosen_probability = probabilities[rel_idx].item()
+
         if (self._last_chosen_probability is not None
                 and self._last_chosen_probability
                 > (self.threshold_ratio * probabilities[rel_idx].item())):

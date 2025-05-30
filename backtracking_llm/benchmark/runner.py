@@ -254,8 +254,8 @@ class BenchmarkRunner:
                 strategy = strategy_cls(**hparams)
             except Exception as e:
                 self.logger.warning(
-                    "Iteration %d: failed to build %s with %s: ", "%s", i,
-                    strategy_name, hparams, e)
+                    "Iteration %d: failed to build %s with %s: %s", i,
+                    i, strategy_name, hparams, e)
 
                 continue
 

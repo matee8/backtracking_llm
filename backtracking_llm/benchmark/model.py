@@ -68,11 +68,6 @@ class BacktrackingLM(huggingface.HFLM):
 
         self.logger.debug("Generating for context: '%s...'", context[:50])
         try:
-            context_token_ids = self.tokenizer.encode(context,
-                                                      add_special_tokens=False)
-
-            prompt_token_length = len(context_token_ids)
-
             token_ids = self.engine.generate(context, None, stop_seq)
             if token_ids is None:
                 self.logger.warning("Engine returned no tokens.")
@@ -84,7 +79,7 @@ class BacktrackingLM(huggingface.HFLM):
 
             answer_token_ids = token_ids[0, engine_prompt_token_length:]
 
-            decoded = self.tokenizer.decode(answer_token_ids[0],
+            decoded = self.tokenizer.decode(answer_token_ids,
                                             skip_special_tokens=True)
 
             self.logger.debug("Raw generated text (before stop seq): '%s...'",

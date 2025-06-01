@@ -145,6 +145,8 @@ class Evaluator:
                 gen_kwargs=gen_kwargs_str,
                 confirm_run_unsafe_code=True)
         else:
+            print(type(lm))
+
             return lm_eval.simple_evaluate(
                 model=lm,
                 tasks=self.config.task_names,

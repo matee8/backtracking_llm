@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Deque, List
 
 import torch
-from torch import Tensor
+from torch import special, Tensor
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class EntropyThreshold(DecisionFunction):
 
     def __call__(self, z: Tensor, p: Tensor, i_chosen: int,
                  v_chosen: int) -> int:
-        if torch.special.entr(p).item() > self.theta:
+        if special.entr(p).item() > self.theta:
             return self.n
 
         return 0
@@ -221,7 +221,7 @@ class LogitThreshold:
         self.backtrack_count = n
 
     def __call__(self, z: Tensor, p: Tensor, i_chosen: int,
-                 v_chosen: torch.Tensor) -> int:
+                 v_chosen: Tensor) -> int:
         if not 0 <= v_chosen < z.shape[0]:
             logger.warning(
                 "Chosen token index %d is out of bounds for logit "

@@ -3,7 +3,7 @@
 import collections
 import logging
 from abc import ABC, abstractmethod
-from typing import Deque, List, Set, Tuple
+from typing import Deque, Set, Tuple
 
 import torch
 from torch import special, Tensor
@@ -15,6 +15,9 @@ class DecisionFunction(ABC):
 
     @abstractmethod
     def __call__(self, z: Tensor, p: Tensor, i_chosen: int, y_hat: int) -> int:
+        pass
+
+    def reset(self) -> None:
         pass
 
 
@@ -153,6 +156,9 @@ class ProbabilityTrend(DecisionFunction):
 
         return 0
 
+    def reset(self) -> None:
+        self._history.clear()
+
 
 class Repetition(DecisionFunction):
 
@@ -178,6 +184,10 @@ class Repetition(DecisionFunction):
             return n
 
         return 0
+
+    def reset(self) -> None:
+        self._v_last = None
+        self._n_repeats = 0
 
 
 class NGramOverlap(DecisionFunction):
@@ -205,6 +215,10 @@ class NGramOverlap(DecisionFunction):
         else:
             self._seen_ngrams.add(last_ngram)
             return 0
+
+    def reset(self) -> None:
+        self._window.clear()
+        self._seen_ngrams.clear()
 
 
 class LogitThreshold:

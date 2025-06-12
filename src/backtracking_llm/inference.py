@@ -1,8 +1,8 @@
 import logging
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Type
 
-from torch import cuda, device
+from torch import cuda, device, Tensor
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.utils.dummy_pt_objects import PreTrainedModel
@@ -48,3 +48,7 @@ class TextGenerator(ABC):
         model.eval()
 
         return cls(model, tokenizer, **kwargs)
+
+    @abstractmethod
+    def generate(self, prompt: str | Tensor, **kwargs) -> Tensor | None:
+        pass

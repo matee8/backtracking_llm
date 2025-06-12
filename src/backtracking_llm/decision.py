@@ -142,13 +142,15 @@ class ProbabilityTrend(DecisionFunction):
         self._history: Deque[float] = collections.deque(maxlen=w)
 
     def __call__(self, z: Tensor, p: Tensor, i_chosen: int, y_hat: int) -> int:
-        if len(self._history) == self.w:
+        p_current = p[i_chosen].item()
+
+        if len(self._history) >= self.w // 2:
             mean_p = sum(self._history) / len(self._history)
-            if p[i_chosen].item() < mean_p * self.m_min:
-                self._history.clear()
+            if p_current < mean_p * self.m_min:
                 return self.backtrack_k
 
-        self._history.append(p[i_chosen].item())
+        self._history.append(p_current)
+
         return 0
 
 

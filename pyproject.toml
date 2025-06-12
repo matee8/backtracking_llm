@@ -43,3 +43,8 @@ dependencies = [
 Homepage = "https://github.com/matee8/bactracking_llm"
 Repository = "https://github.com/matee8/backtracking_llm"
 Issues = "https://github.com/matee8/backtracking_llm/issues"
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]

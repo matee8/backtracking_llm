@@ -3,7 +3,7 @@
 import collections
 import logging
 from abc import ABC, abstractmethod
-from typing import Deque, List
+from typing import Deque, List, Set, Tuple
 
 import torch
 from torch import special, Tensor
@@ -187,25 +187,24 @@ class NGramOverlap(DecisionFunction):
             raise ValueError("n-gram size must be greater than 1")
 
         self.n = n
-        self._history: List[int] = []
+        self._window: Deque[int] = collections.deque(maxlen=self.n)
+        self._seen_ngrams: Set[Tuple[int, ...]] = set()
 
     def __call__(self, z: Tensor, p: Tensor, i_chosen: int, y_hat: int) -> int:
-        self._history.append(y_hat)
+        self._window.append(y_hat)
 
-        if len(self._history) < 2 * self.n:
+        if len(self._window) < self.n:
             logger.warning("Not enough history to form two n-grams for "
                            "comparison.")
             return 0
 
-        last_ngram = tuple(self._history[-self.n:])
-        s = self._history[:-self.n]
+        last_ngram = tuple(self._window)
 
-        for i in range(len(s) - self.n + 1):
-            if tuple(s[i:i + self.n]) == last_ngram:
-                self._history = self._history[:-self.n]
-                return self.n
-
-        return 0
+        if last_ngram in self._seen_ngrams:
+            return self.n
+        else:
+            self._seen_ngrams.add(last_ngram)
+            return 0
 
 
 class LogitThreshold:

@@ -6,7 +6,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from backtracking_llm.decision import ProbabilityThreshold
+from backtracking_llm.decision import EntropyThreshold, ProbabilityThreshold
 
 
 @pytest.fixture
@@ -20,9 +20,9 @@ def base_p(base_z: Tensor) -> Tensor:
 
 
 def test_default_reset_do_not_fail():
-    df = ProbabilityThreshold()
+    delta = ProbabilityThreshold()
     try:
-        df.reset()
+        delta.reset()
     except Exception as e:
         pytest.fail(f"Default reset method raised an unexpected error: {e}")
 
@@ -44,23 +44,56 @@ class TestProbabilityThreshold:
             with pytest.raises(ValueError):
                 ProbabilityThreshold(p_min, backtrack_k)
         else:
-            df = ProbabilityThreshold(p_min, backtrack_k)
-            assert df.p_min == p_min
-            assert df.backtrack_k == backtrack_k
+            delta = ProbabilityThreshold(p_min, backtrack_k)
+            assert delta.p_min == p_min
+            assert delta.backtrack_k == backtrack_k
 
     def test_call_triggers_backtrack(self, base_z, base_p):
-        df = ProbabilityThreshold(0.05, 3)
-        result = df(z=base_z, p=base_p, i_chosen=0, y_hat=123)
+        delta = ProbabilityThreshold(0.05, 3)
+        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=123)
         assert result == 3
 
     def test_call_no_backtrack(self, base_z, base_p):
-        df = ProbabilityThreshold(0.05, 3)
-        result = df(z=base_z, p=base_p, i_chosen=1, y_hat=456)
+        delta = ProbabilityThreshold(0.05, 3)
+        result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=456)
         assert result == 0
 
     def test_call_out_of_bounds_index(self, base_p, base_z, caplog):
-        df = ProbabilityThreshold()
+        delta = ProbabilityThreshold()
         with caplog.at_level(logging.WARNING):
-            result = df(base_z, base_p, i_chosen=99, y_hat=789)
+            result = delta(base_z, base_p, i_chosen=99, y_hat=789)
         assert result == 0
         assert "out of bounds" in caplog.text
+
+
+class TestEntropyThreshold:
+
+
+    @pytest.mark.parametrize(
+        "h_max, backtrack_k, should_raise",
+        [
+            (2.5, 2, False),
+            (0.0, 1, True),
+            (2.5, 0, True),
+        ],
+    )
+    def test_init(self, h_max, backtrack_k, should_raise):
+        if should_raise:
+            with pytest.raises(ValueError):
+                EntropyThreshold(h_max=h_max, backtrack_k=backtrack_k)
+        else:
+            delta = EntropyThreshold(h_max=h_max, backtrack_k=backtrack_k)
+            assert delta.h_max == h_max
+            assert delta.backtrack_k == backtrack_k
+
+
+    def test_call_triggers_backtrack(self, base_z):
+        p_high_h = torch.tensor([0.25, 0.25, 0.25, 0.25])
+        delta = EntropyThreshold(1.0, 2)
+        result = delta(z=base_z, p=p_high_h, i_chosen=0, y_hat=123)
+        assert result == 2
+
+    def test_call_no_backtrack(self, base_z, base_p):
+        delta = EntropyThreshold(1.0, 2)
+        result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=456)
+        assert result == 0

@@ -126,6 +126,9 @@ class ProbabilityDrop(DecisionFunction):
         self._p_last = p[i_chosen].item()
         return 0
 
+    def reset(self) -> None:
+        self._p_last = None
+
 
 class ProbabilityTrend(DecisionFunction):
 

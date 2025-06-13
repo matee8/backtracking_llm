@@ -211,3 +211,16 @@ class TestProbabilityDrop:
                        y_hat=789)
         assert result == 0
         assert delta._p_last == pytest.approx(0.8)
+
+    def test_call_out_of_bounds_index_resets_state(self, base_z, base_p,
+                                                   caplog):
+        delta = ProbabilityDrop()
+        delta(z=base_z, p=base_p, i_chosen=1, y_hat=123)
+        assert delta._p_last is not None
+
+        with caplog.at_level(logging.WARNING):
+            result = delta(z=base_z, p=base_p, i_chosen=99, y_hat=456)
+
+        assert result == 0
+        assert "out of bounds" in caplog.text
+        assert delta._p_last is None

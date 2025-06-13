@@ -42,20 +42,20 @@ class TestProbabilityThreshold:
     def test_init(self, p_min, backtrack_k, should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                ProbabilityThreshold(p_min=p_min, backtrack_k=backtrack_k)
+                ProbabilityThreshold(p_min, backtrack_k)
         else:
-            df = ProbabilityThreshold(p_min=p_min, backtrack_k=backtrack_k)
+            df = ProbabilityThreshold(p_min, backtrack_k)
             assert df.p_min == p_min
             assert df.backtrack_k == backtrack_k
 
     def test_call_triggers_backtrack(self, base_z, base_p):
-        df = ProbabilityThreshold(p_min=0.05, backtrack_k=3)
-        result = df(base_z, base_p, i_chosen=0, y_hat=123)
+        df = ProbabilityThreshold(0.05, 3)
+        result = df(z=base_z, p=base_p, i_chosen=0, y_hat=123)
         assert result == 3
 
     def test_call_no_backtrack(self, base_z, base_p):
-        df = ProbabilityThreshold(p_min=0.05, backtrack_k=3)
-        result = df(base_z, base_p, i_chosen=1, y_hat=456)
+        df = ProbabilityThreshold(0.05, 3)
+        result = df(z=base_z, p=base_p, i_chosen=1, y_hat=456)
         assert result == 0
 
     def test_call_out_of_bounds_index(self, base_p, base_z, caplog):

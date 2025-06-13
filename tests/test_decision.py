@@ -1,4 +1,5 @@
 # pylint: disable=redefined-outer-name
+# pylint: disable=protected-access
 
 import logging
 
@@ -8,6 +9,7 @@ from torch import Tensor
 
 from backtracking_llm.decision import (
     EntropyThreshold,
+    ProbabilityDrop,
     ProbabilityMargin,
     ProbabilityThreshold,
 )
@@ -140,3 +142,72 @@ class TestProbabilityMargin:
         assert "fewer than 2" in caplog.text
 
 
+class TestProbabilityDrop:
+
+    @pytest.mark.parametrize(
+        "m_min, backtrack_k, should_raise",
+        [
+            (2, 2, False),
+            (0, 1, True),
+            (1, -1, True),
+        ],
+    )
+    def test_init(self, m_min, backtrack_k, should_raise):
+        if should_raise:
+            with pytest.raises(ValueError):
+                ProbabilityDrop(m_min, backtrack_k)
+        else:
+            delta = ProbabilityDrop(m_min, backtrack_k)
+            assert delta.m_min == m_min
+            assert delta.backtrack_k == backtrack_k
+
+    def test_call_no_backtrack_on_first_step(self, base_z, base_p):
+        delta = ProbabilityDrop()
+        result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=123)
+        assert result == 0
+        assert delta._p_last is not None
+        assert delta._p_last == pytest.approx(base_p[1].item())
+
+    def test_call_triggers_backtrack_on_sharp_drop(self, base_z):
+        delta = ProbabilityDrop(2.0, 2)
+        p_high = torch.tensor([0.1, 0.8, 1.0])
+        delta(z=base_z, p=p_high, i_chosen=1, y_hat=456)
+        assert delta._p_last == pytest.approx(0.8)
+
+        p_low = torch.tensor([0.3, 0.4, 0.3])
+        result = delta(z=base_z, p=p_low, i_chosen=0, y_hat=789)
+
+        assert result == 2
+
+    def test_state_resets_after_backtrack_trigger(self, base_z):
+        delta = ProbabilityDrop(2.0, 1)
+        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=123)
+        assert delta._p_last is not None
+
+        delta(z=base_z, p=torch.tensor([0.3, 0.7]), i_chosen=0, y_hat=456)
+        assert delta._p_last is None
+
+    def test_call_no_backtrack_on_small_drop(self, base_z):
+        delta = ProbabilityDrop(2.0, 1)
+        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=789)
+        assert delta._p_last == pytest.approx(0.8)
+
+        result = delta(z=base_z,
+                       p=torch.tensor([0.5, 0.5]),
+                       i_chosen=0,
+                       y_hat=123)
+        assert result == 0
+
+        assert delta._p_last == pytest.approx(0.5)
+
+    def test_call_no_backtrack_on_increase(self, base_z):
+        delta = ProbabilityDrop(2.0, 1)
+        delta(z=base_z, p=torch.tensor([0.3, 0.7]), i_chosen=0, y_hat=456)
+        assert delta._p_last == pytest.approx(0.3)
+
+        result = delta(z=base_z,
+                       p=torch.tensor([0.8, 0.2]),
+                       i_chosen=0,
+                       y_hat=789)
+        assert result == 0
+        assert delta._p_last == pytest.approx(0.8)

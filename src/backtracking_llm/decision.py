@@ -52,6 +52,9 @@ class EntropyThreshold(DecisionFunction):
         if h_max <= 0.0:
             raise ValueError("Threshold must be non-negative")
 
+        if backtrack_k < 1:
+            raise ValueError("Backtrack count must be positive")
+
         self.h_max = h_max
         self.backtrack_k = backtrack_k
 

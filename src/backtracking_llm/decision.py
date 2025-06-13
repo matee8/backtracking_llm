@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Deque, Set, Tuple
 
 import torch
-from torch import special, Tensor
+from torch import Tensor
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class EntropyThreshold(DecisionFunction):
         self.backtrack_k = backtrack_k
 
     def __call__(self, z: Tensor, p: Tensor, i_chosen: int, y_hat: int) -> int:
-        if special.entr(p).item() > self.h_max:
+        if -(p * p.log()).sum() > self.h_max:
             return self.backtrack_k
 
         return 0

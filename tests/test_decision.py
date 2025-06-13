@@ -65,7 +65,7 @@ class TestProbabilityThreshold:
     def test_call_out_of_bounds_index(self, base_p, base_z, caplog):
         delta = ProbabilityThreshold()
         with caplog.at_level(logging.WARNING):
-            result = delta(base_z, base_p, i_chosen=99, y_hat=789)
+            result = delta(z=base_z, p=base_p, i_chosen=99, y_hat=789)
         assert result == 0
         assert "out of bounds" in caplog.text
 
@@ -130,3 +130,13 @@ class TestProbabilityMargin:
         delta = ProbabilityMargin(0.1, 1)
         result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=456)
         assert result == 0
+
+    def test_call_small_vocab(self, base_z, caplog):
+        small_p = torch.tensor([1.0])
+        delta = ProbabilityMargin()
+        with caplog.at_level(logging.WARNING):
+            result = delta(z=base_z, p=small_p, i_chosen=99, y_hat=789)
+        assert result == 0
+        assert "fewer than 2" in caplog.text
+
+

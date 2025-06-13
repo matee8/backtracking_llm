@@ -12,6 +12,7 @@ from backtracking_llm.decision import (
     ProbabilityDrop,
     ProbabilityMargin,
     ProbabilityThreshold,
+    ProbabilityTrend,
 )
 
 
@@ -224,3 +225,87 @@ class TestProbabilityDrop:
         assert result == 0
         assert "out of bounds" in caplog.text
         assert delta._p_last is None
+
+
+class TestProbabilityTrend:
+
+    @pytest.mark.parametrize(
+        "w, m_min, backtrack_k, should_raise",
+        [(10, 0.5, 2, False), (1, 0.5, 2, True), (10, 1.5, 2, True),
+         (10, 0.5, 0, True)],
+    )
+    def test_init(self, w, m_min, backtrack_k, should_raise):
+        if should_raise:
+            with pytest.raises(ValueError):
+                ProbabilityTrend(w, m_min, backtrack_k)
+        else:
+            delta = ProbabilityTrend(w, m_min, backtrack_k)
+            assert delta.w == w
+            assert delta.m_min == m_min
+            assert delta.backtrack_k == backtrack_k
+
+    def test_call_state_management(self, base_z):
+        delta = ProbabilityTrend(4, 0.5, 2)
+        result = delta(z=base_z,
+                       p=torch.tensor([0.9, 0.1]),
+                       i_chosen=0,
+                       y_hat=1)
+        assert result == 0
+        assert len(delta._history) == 1
+        assert delta._history == pytest.approx([0.9])
+
+        result = delta(z=base_z,
+                       p=torch.tensor([0.8, 0.2]),
+                       i_chosen=0,
+                       y_hat=1)
+        assert result == 0
+        assert len(delta._history) == 2
+        assert delta._history == pytest.approx([0.9, 0.8])
+
+    def test_call_backtrack_on_drop(self, base_z):
+        delta = ProbabilityTrend(2, 0.5, 1)
+        delta(z=base_z, p=torch.tensor([0.9, 0.1]), i_chosen=0, y_hat=1)
+        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=1)
+        assert len(delta._history) == 2
+        assert delta._history == pytest.approx([0.9, 0.8])
+
+        result = delta(z=base_z,
+                       p=torch.tensor([0.1, 0.9]),
+                       i_chosen=0,
+                       y_hat=1)
+        assert result == 1
+        assert len(delta._history) == 2
+        assert delta._history == pytest.approx([0.9, 0.8])
+
+    def test_call_no_backtrack_on_increase(self, base_z):
+        delta = ProbabilityTrend(2, 0.5, 1)
+        delta(z=base_z, p=torch.tensor([0.9, 0.1]), i_chosen=0, y_hat=1)
+        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=1)
+        assert len(delta._history) == 2
+        assert delta._history == pytest.approx([0.9, 0.8])
+
+        result = delta(z=base_z,
+                       p=torch.tensor([0.1, 0.9]),
+                       i_chosen=1,
+                       y_hat=2)
+        assert result == 0
+
+    def test_call_no_backtrack_rolls_window(self, base_z):
+        delta = ProbabilityTrend(2, 0.5, 1)
+        delta(z=base_z, p=torch.tensor([0.9, 0.1]), i_chosen=0, y_hat=1)
+        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=1)
+        assert len(delta._history) == 2
+        assert delta._history == pytest.approx([0.9, 0.8])
+
+        delta(z=base_z, p=torch.tensor([0.1, 0.9]), i_chosen=1, y_hat=2)
+        assert len(delta._history) == 2
+        assert delta._history == pytest.approx([0.8, 0.9])
+
+    def test_reset_clears_window(self, base_z, base_p):
+        delta = ProbabilityTrend(2, 0.5, 1)
+        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        assert len(delta._history) == 2
+
+        delta.reset()
+        assert len(delta._history) == 0

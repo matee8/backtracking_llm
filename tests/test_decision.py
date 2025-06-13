@@ -6,7 +6,11 @@ import pytest
 import torch
 from torch import Tensor
 
-from backtracking_llm.decision import EntropyThreshold, ProbabilityThreshold
+from backtracking_llm.decision import (
+    EntropyThreshold,
+    ProbabilityMargin,
+    ProbabilityThreshold,
+)
 
 
 @pytest.fixture
@@ -68,7 +72,6 @@ class TestProbabilityThreshold:
 
 class TestEntropyThreshold:
 
-
     @pytest.mark.parametrize(
         "h_max, backtrack_k, should_raise",
         [
@@ -86,7 +89,6 @@ class TestEntropyThreshold:
             assert delta.h_max == h_max
             assert delta.backtrack_k == backtrack_k
 
-
     def test_call_triggers_backtrack(self, base_z):
         p_high_h = torch.tensor([0.25, 0.25, 0.25, 0.25])
         delta = EntropyThreshold(1.0, 2)
@@ -95,5 +97,36 @@ class TestEntropyThreshold:
 
     def test_call_no_backtrack(self, base_z, base_p):
         delta = EntropyThreshold(1.0, 2)
+        result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=456)
+        assert result == 0
+
+
+class TestProbabilityMargin:
+
+    @pytest.mark.parametrize(
+        "m_min, backtrack_k, should_raise",
+        [
+            (0.5, 2, False),
+            (-0.5, 1, True),
+            (0.5, -1, True),
+        ],
+    )
+    def test_init(self, m_min, backtrack_k, should_raise):
+        if should_raise:
+            with pytest.raises(ValueError):
+                ProbabilityMargin(m_min, backtrack_k)
+        else:
+            delta = ProbabilityMargin(m_min, backtrack_k)
+            assert delta.m_min == m_min
+            assert delta.backtrack_k == backtrack_k
+
+    def test_call_triggers_backtrack(self, base_z):
+        p_with_close_top_k = torch.tensor([0.4, 0.38, 0.12, 0.1])
+        delta = ProbabilityMargin(0.05, 1)
+        result = delta(z=base_z, p=p_with_close_top_k, i_chosen=0, y_hat=123)
+        assert result == 1
+
+    def test_call_no_backtrack(self, base_z, base_p):
+        delta = ProbabilityMargin(0.1, 1)
         result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=456)
         assert result == 0

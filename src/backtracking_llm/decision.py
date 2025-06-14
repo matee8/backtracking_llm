@@ -238,7 +238,7 @@ class LogitThreshold(DecisionFunction):
         self.backtrack_k = backtrack_k
 
     def __call__(self, z: Tensor, p: Tensor, i_chosen: int, y_hat: int) -> int:
-        if not 0 <= y_hat < z.shape[0]:
+        if not 0 <= i_chosen < z.shape[0]:
             logger.warning(
                 "Chosen token index %d is out of bounds for logit "
                 "tensor of size %d.", i_chosen, z.shape[0])

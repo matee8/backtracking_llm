@@ -183,7 +183,7 @@ class Repetition(DecisionFunction):
             self._n_repeats = 1
             self._v_last = y_hat
 
-        if self._n_repeats >= self.max_n:
+        if self._n_repeats > self.max_n:
             n = self._n_repeats
             self._n_repeats = 0
             self._v_last = None

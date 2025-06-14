@@ -9,6 +9,7 @@ from torch import Tensor
 
 from backtracking_llm.decision import (
     EntropyThreshold,
+    NGramOverlap,
     ProbabilityDrop,
     ProbabilityMargin,
     ProbabilityThreshold,
@@ -380,3 +381,60 @@ class TestRepetition:
 
         delta.reset()
         assert delta._n_repeats == 0
+
+
+class TestNGramOverlap:
+
+    @pytest.mark.parametrize(
+        "n, should_raise",
+        [
+            (3, False),
+            (0, True),
+        ],
+    )
+    def test_init(self, n, should_raise):
+        if should_raise:
+            with pytest.raises(ValueError):
+                NGramOverlap(n)
+        else:
+            delta = NGramOverlap(n)
+            assert delta.n == n
+
+    def test_call_state_management(self, base_z, base_p):
+        delta = NGramOverlap(2)
+        v_s = [10, 20, 30]
+
+        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[0]) == 0
+        assert delta._window == pytest.approx([10])
+
+        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[1]) == 0
+        assert delta._window == pytest.approx([10, 20])
+
+        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[2]) == 0
+        assert list(delta._seen_ngrams) == pytest.approx([(20, 30), (10, 20)])
+        assert delta._window == pytest.approx([20, 30])
+
+    def test_call_backtrack_on_ngram_repeat(self, base_z, base_p):
+        delta = NGramOverlap(2)
+        v_s = [10, 20, 30, 10, 20]
+
+        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[0]) == 0
+        assert len(delta._window) == 1
+
+        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[1]) == 0
+        assert len(delta._window) == 2
+
+        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[2]) == 0
+        assert len(delta._window) == 2
+
+        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[3]) == 0
+        assert len(delta._window) == 2
+
+        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[4]) == 2
+        assert len(delta._window) == 0
+
+    def test_call_no_backtrack_on_unique_sequence(self, base_z, base_p):
+        delta = NGramOverlap(3)
+        v_s = [10, 20, 30, 40, 50, 60]
+        for v in v_s:
+            assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v) == 0

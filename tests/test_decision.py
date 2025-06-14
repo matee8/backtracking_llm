@@ -13,6 +13,7 @@ from backtracking_llm.decision import (
     ProbabilityMargin,
     ProbabilityThreshold,
     ProbabilityTrend,
+    Repetition,
 )
 
 
@@ -231,8 +232,12 @@ class TestProbabilityTrend:
 
     @pytest.mark.parametrize(
         "w, m_min, backtrack_k, should_raise",
-        [(10, 0.5, 2, False), (1, 0.5, 2, True), (10, 1.5, 2, True),
-         (10, 0.5, 0, True)],
+        [
+            (10, 0.5, 2, False),
+            (1, 0.5, 2, True),
+            (10, 1.5, 2, True),
+            (10, 0.5, 0, True),
+        ],
     )
     def test_init(self, w, m_min, backtrack_k, should_raise):
         if should_raise:
@@ -309,3 +314,69 @@ class TestProbabilityTrend:
 
         delta.reset()
         assert len(delta._history) == 0
+
+
+class TestRepetition:
+
+    @pytest.mark.parametrize(
+        "max_n, should_raise",
+        [
+            (3, False),
+            (0, True),
+        ],
+    )
+    def test_init(self, max_n, should_raise):
+        if should_raise:
+            with pytest.raises(ValueError):
+                Repetition(max_n)
+        else:
+            delta = Repetition(max_n)
+            assert delta.max_n == max_n
+
+    def test_call_state_management(self, base_z, base_p):
+        delta = Repetition(3)
+        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        assert result == 0
+        assert delta._v_last == 1
+        assert delta._n_repeats == 1
+
+        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        assert result == 0
+        assert delta._v_last == 1
+        assert delta._n_repeats == 2
+
+    def test_call_repetition_triggers_backtrack(self, base_z, base_p):
+        delta = Repetition(2)
+
+        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        assert result == 0
+        assert delta._n_repeats == 1
+
+        result = delta(z=base_p, p=base_p, i_chosen=0, y_hat=1)
+        assert result == 0
+        assert delta._n_repeats == 2
+
+        result = delta(z=base_p, p=base_p, i_chosen=0, y_hat=1)
+        assert result == 3
+
+        assert delta._n_repeats == 0
+
+    def test_call_counter_resets_on_new_token(self, base_z, base_p):
+        delta = Repetition(2)
+
+        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        assert delta._n_repeats == 1
+        assert delta._v_last == 1
+
+        delta(z=base_z, p=base_p, i_chosen=1, y_hat=2)
+        assert delta._n_repeats == 1
+        assert delta._v_last == 2
+
+    def test_reset_clears_window(self, base_z, base_p):
+        delta = Repetition(2)
+        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        assert delta._n_repeats == 2
+
+        delta.reset()
+        assert delta._n_repeats == 0

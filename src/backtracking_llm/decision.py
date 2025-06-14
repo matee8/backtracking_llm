@@ -228,7 +228,7 @@ class NGramOverlap(DecisionFunction):
         self._seen_ngrams.clear()
 
 
-class LogitThreshold:
+class LogitThreshold(DecisionFunction):
 
     def __init__(self, z_min: int = -20, backtrack_k: int = 1) -> None:
         if backtrack_k < 1:
@@ -237,8 +237,7 @@ class LogitThreshold:
         self.z_min = z_min
         self.backtrack_k = backtrack_k
 
-    def __call__(self, z: Tensor, p: Tensor, i_chosen: int,
-                 y_hat: Tensor) -> int:
+    def __call__(self, z: Tensor, p: Tensor, i_chosen: int, y_hat: int) -> int:
         if not 0 <= y_hat < z.shape[0]:
             logger.warning(
                 "Chosen token index %d is out of bounds for logit "

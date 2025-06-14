@@ -217,6 +217,7 @@ class NGramOverlap(DecisionFunction):
         last_ngram = tuple(self._window)
 
         if last_ngram in self._seen_ngrams:
+            self._window.clear()
             return self.n
         else:
             self._seen_ngrams.add(last_ngram)

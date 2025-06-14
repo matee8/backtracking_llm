@@ -9,6 +9,7 @@ from torch import Tensor
 
 from backtracking_llm.decision import (
     EntropyThreshold,
+    LogitThreshold,
     NGramOverlap,
     ProbabilityDrop,
     ProbabilityMargin,
@@ -438,3 +439,41 @@ class TestNGramOverlap:
         v_s = [10, 20, 30, 40, 50, 60]
         for v in v_s:
             assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v) == 0
+
+
+class TestLogitThreshold:
+
+    @pytest.mark.parametrize(
+        "z_min, backtrack_k, should_raise",
+        [
+            (20, 2, False),
+            (20, 0, True),
+        ],
+    )
+    def test_init(self, z_min, backtrack_k, should_raise):
+        if should_raise:
+            with pytest.raises(ValueError):
+                LogitThreshold(z_min, backtrack_k)
+        else:
+            delta = LogitThreshold(z_min, backtrack_k)
+            assert delta.z_min == z_min
+            assert delta.backtrack_k == backtrack_k
+
+    def test_call_triggers_backtrack(self, base_z, base_p):
+        delta = LogitThreshold(1, 3)
+        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        assert result == 3
+
+    def test_call_no_backtrack(self, base_z, base_p):
+        delta = LogitThreshold(-3, 3)
+        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
+        assert result == 0
+
+    def test_call_out_of_bounds_index(self, base_z, base_p, caplog):
+        delta = LogitThreshold(1, 3)
+
+        with caplog.at_level(logging.WARNING):
+            result = delta(z=base_z, p=base_p, i_chosen=99, y_hat=1)
+
+        assert result == 0
+        assert "out of bounds" in caplog.text

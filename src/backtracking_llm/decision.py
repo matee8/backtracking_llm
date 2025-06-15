@@ -1,14 +1,51 @@
 # pylint: disable=unused-argument
 
 import collections
+from dataclasses import dataclass
 import logging
 from abc import ABC, abstractmethod
-from typing import Deque, Set, Tuple
+from typing import Any, Deque, Dict, Generic, Set, Tuple, TypeVar
 
 import torch
 from torch import Tensor
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class Key(Generic[T]):
+    name: str
+
+
+LOGITS = Key[Tensor]("LOGITS")
+PROBABILITIES = Key[Tensor]("PROBABILITIES")
+CHOSEN_TOKEN_ID = Key[int]("CHOSEN_TOKEN_ID")
+CHOSEN_TOKEN_INDEX = Key[int]("CHOSEN_TOKEN_INDEX")
+
+
+class Context:
+
+    def __init__(self) -> None:
+        self._store: Dict[Key[Any], Any] = {}
+
+    def __getitem__(self, key: Key[T]) -> T:
+        return self._store[key]
+
+    def __setitem__(self, key: Key[T], value: T) -> None:
+        self._store[key] = value
+
+
+@dataclass(frozen=True)
+class Outcome:
+    should_backtrack: bool
+    tokens_to_remove: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.should_backtrack and self.tokens_to_remove != 0:
+            raise ValueError("tokens_to_remove must be 0 when not "
+                             "backtracking.")
 
 
 class DecisionFunction(ABC):

@@ -8,6 +8,12 @@ import torch
 from torch import Tensor
 
 from backtracking_llm.decision import (
+    PROBABILITIES,
+    LOGITS,
+    CHOSEN_OUTPUT,
+    CHOSEN_INDEX,
+    Key,
+    MissingContextDataError,
     Context,
     EntropyThreshold,
     LogitThreshold,
@@ -17,10 +23,6 @@ from backtracking_llm.decision import (
     ProbabilityThreshold,
     ProbabilityTrend,
     Repetition,
-    PROBABILITIES,
-    LOGITS,
-    CHOSEN_OUTPUT,
-    CHOSEN_INDEX,
 )
 
 
@@ -40,6 +42,13 @@ def test_default_reset_do_not_fail():
         operator.reset()
     except Exception as e:
         pytest.fail(f"Default reset method raised an unexpected error: {e}")
+
+def test_missing_key_raises_custom_error():
+    operator = ProbabilityThreshold()
+    context = Context()
+
+    with pytest.raises(MissingContextDataError):
+        operator.decide(context)
 
 
 class TestProbabilityThreshold:

@@ -22,8 +22,10 @@ PROBABILITIES = Key[Tensor]("PROBABILITIES")
 CHOSEN_OUTPUT = Key[int]("CHOSEN_OUTPUT")
 CHOSEN_INDEX = Key[int]("CHOSEN_INDEX")
 
+
 class MissingContextDataError(KeyError):
     pass
+
 
 class Context:
 
@@ -40,9 +42,10 @@ class Context:
         try:
             return self._store[key]
         except KeyError as e:
-            raise MissingContextDataError(f"Required data for key '{key.name}' "
-                                          "was not found in the context. Ensure"
-                                          " it is computed and provided.") from e
+            raise MissingContextDataError(
+                f"Required data for key '{key.name}' "
+                "was not found in the context. Ensure"
+                " it is computed and provided.") from e
 
 
 @dataclass(frozen=True)
@@ -71,16 +74,22 @@ class Operator(ABC):
         pass
 
 
+class InvalidHyperparameterError(ValueError):
+    pass
+
+
 class ProbabilityThreshold(Operator):
 
     def __init__(self,
                  minimum_probability: float = 0.05,
                  backtrack_count: int = 1) -> None:
         if not 0.0 < minimum_probability < 1.0:
-            raise ValueError("Minimum probability must be between 0.0 and 1.0")
+            raise InvalidHyperparameterError(
+                "Minimum probability must be between 0.0 and 1.0")
 
         if backtrack_count < 1:
-            raise ValueError("Backtrack count must be positive")
+            raise InvalidHyperparameterError(
+                "Backtrack count must be positive")
 
         self.minimum_probability = minimum_probability
         self.backtrack_count = backtrack_count
@@ -113,10 +122,11 @@ class EntropyThreshold(Operator):
                  maximum_entropy: float = 2.5,
                  backtrack_count: int = 2) -> None:
         if maximum_entropy <= 0.0:
-            raise ValueError("Threshold must be non-negative")
+            raise InvalidHyperparameterError("Threshold must be non-negative")
 
         if backtrack_count < 1:
-            raise ValueError("Backtrack count must be positive")
+            raise InvalidHyperparameterError(
+                "Backtrack count must be positive")
 
         self.maximum_entropy = maximum_entropy
         self.backtrack_count = backtrack_count
@@ -142,10 +152,12 @@ class ProbabilityMargin(Operator):
                  minimum_margin: float = 0.05,
                  backtrack_count: int = 1) -> None:
         if not 0.0 <= minimum_margin <= 1.0:
-            raise ValueError("Margin must be between 0.0 and 1.0")
+            raise InvalidHyperparameterError(
+                "Margin must be between 0.0 and 1.0")
 
         if backtrack_count < 1:
-            raise ValueError("Backtrack count must be positive")
+            raise InvalidHyperparameterError(
+                "Backtrack count must be positive")
 
         self.minimum_margin = minimum_margin
         self.backtrack_count = backtrack_count
@@ -177,10 +189,11 @@ class ProbabilityDrop(Operator):
                  minimum_margin: float = 2.0,
                  backtrack_count: int = 1) -> None:
         if minimum_margin < 1:
-            raise ValueError("Drop ratio must be positive")
+            raise InvalidHyperparameterError("Drop ratio must be positive")
 
         if backtrack_count < 1:
-            raise ValueError("Backtrack count must be positive")
+            raise InvalidHyperparameterError(
+                "Backtrack count must be positive")
 
         self.minimum_margin = minimum_margin
         self.backtrack_count = backtrack_count
@@ -227,13 +240,15 @@ class ProbabilityTrend(Operator):
                  minimum_margin: float = 0.5,
                  backtrack_count: int = 1) -> None:
         if window_size < 2:
-            raise ValueError("Window size must be at least 2.")
+            raise InvalidHyperparameterError("Window size must be at least 2.")
 
         if not 0.0 < minimum_margin < 1.0:
-            raise ValueError("Drop ratio must be between 0.0 and 1.0")
+            raise InvalidHyperparameterError(
+                "Drop ratio must be between 0.0 and 1.0")
 
         if backtrack_count < 1:
-            raise ValueError("Backtrack count must be a positive integer.")
+            raise InvalidHyperparameterError(
+                "Backtrack count must be a positive integer.")
 
         self.window_size = window_size
         self.minimum_margin = minimum_margin
@@ -277,7 +292,8 @@ class Repetition(Operator):
 
     def __init__(self, maximum_repeats: int = 3) -> None:
         if maximum_repeats < 1:
-            raise ValueError("Max repetitions must be positive")
+            raise InvalidHyperparameterError(
+                "Max repetitions must be positive")
 
         self.maximum_repeats = maximum_repeats
         self._last_chosen_output: int | None = None
@@ -318,7 +334,8 @@ class NGramOverlap(Operator):
 
     def __init__(self, ngram_size: int = 4) -> None:
         if ngram_size < 2:
-            raise ValueError("n-gram size must be greater than 1")
+            raise InvalidHyperparameterError(
+                "n-gram size must be greater than 1")
 
         self.ngram_size = ngram_size
         self._current_ngram: Deque[int] = collections.deque(
@@ -362,7 +379,8 @@ class LogitThreshold(Operator):
                  minimum_logit: int = -20,
                  backtrack_count: int = 1) -> None:
         if backtrack_count < 1:
-            raise ValueError("Backtrack count must be positive")
+            raise InvalidHyperparameterError(
+                "Backtrack count must be positive")
 
         self.minimum_logit = minimum_logit
         self.backtrack_count = backtrack_count

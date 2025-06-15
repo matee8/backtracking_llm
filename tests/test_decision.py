@@ -12,7 +12,7 @@ from backtracking_llm.decision import (
     LOGITS,
     CHOSEN_OUTPUT,
     CHOSEN_INDEX,
-    Key,
+    InvalidHyperparameterError,
     MissingContextDataError,
     Context,
     EntropyThreshold,
@@ -43,6 +43,7 @@ def test_default_reset_do_not_fail():
     except Exception as e:
         pytest.fail(f"Default reset method raised an unexpected error: {e}")
 
+
 def test_missing_key_raises_custom_error():
     operator = ProbabilityThreshold()
     context = Context()
@@ -65,7 +66,7 @@ class TestProbabilityThreshold:
     )
     def test_init(self, minimum_probability, backtrack_count, should_raise):
         if should_raise:
-            with pytest.raises(ValueError):
+            with pytest.raises(InvalidHyperparameterError):
                 ProbabilityThreshold(minimum_probability, backtrack_count)
         else:
             delta = ProbabilityThreshold(minimum_probability, backtrack_count)
@@ -121,7 +122,7 @@ class TestEntropyThreshold:
     )
     def test_init(self, maximum_entropy, backtrack_count, should_raise):
         if should_raise:
-            with pytest.raises(ValueError):
+            with pytest.raises(InvalidHyperparameterError):
                 EntropyThreshold(maximum_entropy, backtrack_count)
         else:
             delta = EntropyThreshold(maximum_entropy, backtrack_count)
@@ -161,7 +162,7 @@ class TestProbabilityMargin:
     )
     def test_init(self, minimum_margin, backtrack_count, should_raise):
         if should_raise:
-            with pytest.raises(ValueError):
+            with pytest.raises(InvalidHyperparameterError):
                 ProbabilityMargin(minimum_margin, backtrack_count)
         else:
             delta = ProbabilityMargin(minimum_margin, backtrack_count)
@@ -211,7 +212,7 @@ class TestProbabilityDrop:
     )
     def test_init(self, minimum_margin, backtrack_count, should_raise):
         if should_raise:
-            with pytest.raises(ValueError):
+            with pytest.raises(InvalidHyperparameterError):
                 ProbabilityDrop(minimum_margin, backtrack_count)
         else:
             operator = ProbabilityDrop(minimum_margin, backtrack_count)
@@ -356,7 +357,7 @@ class TestProbabilityTrend:
     def test_init(self, window_size, minimum_margin, backtrack_count,
                   should_raise):
         if should_raise:
-            with pytest.raises(ValueError):
+            with pytest.raises(InvalidHyperparameterError):
                 ProbabilityTrend(window_size, minimum_margin, backtrack_count)
         else:
             operator = ProbabilityTrend(window_size, minimum_margin,
@@ -505,7 +506,7 @@ class TestRepetition:
     )
     def test_init(self, max_repeats, should_raise):
         if should_raise:
-            with pytest.raises(ValueError):
+            with pytest.raises(InvalidHyperparameterError):
                 Repetition(max_repeats)
         else:
             operator = Repetition(max_repeats)
@@ -590,7 +591,7 @@ class TestNGramOverlap:
     )
     def test_init(self, ngram_size, should_raise):
         if should_raise:
-            with pytest.raises(ValueError):
+            with pytest.raises(InvalidHyperparameterError):
                 NGramOverlap(ngram_size)
         else:
             operator = NGramOverlap(ngram_size)
@@ -687,7 +688,7 @@ class TestLogitThreshold:
     )
     def test_init(self, minimum_logit, backtrack_count, should_raise):
         if should_raise:
-            with pytest.raises(ValueError):
+            with pytest.raises(InvalidHyperparameterError):
                 LogitThreshold(minimum_logit, backtrack_count)
         else:
             operator = LogitThreshold(minimum_logit, backtrack_count)

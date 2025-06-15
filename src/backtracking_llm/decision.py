@@ -36,7 +36,7 @@ class Context:
 
 
 @dataclass(frozen=True)
-class BacktrackDecision:
+class Outcome:
     should_backtrack: bool
     steps_to_remove: int = 0
 
@@ -46,7 +46,7 @@ class BacktrackDecision:
                              "backtracking.")
 
 
-class DecisionFunction(ABC):
+class Operator(ABC):
 
     @property
     @abstractmethod
@@ -54,14 +54,14 @@ class DecisionFunction(ABC):
         pass
 
     @abstractmethod
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         pass
 
     def reset(self) -> None:
         pass
 
 
-class ProbabilityThreshold(DecisionFunction):
+class ProbabilityThreshold(Operator):
 
     def __init__(self,
                  minimum_probability: float = 0.05,
@@ -79,7 +79,7 @@ class ProbabilityThreshold(DecisionFunction):
     def required_inputs(self) -> Set[Key[Any]]:
         return {PROBABILITIES, CHOSEN_INDEX}
 
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         probabilities = context[PROBABILITIES]
         chosen_index = context[CHOSEN_INDEX]
 
@@ -88,16 +88,16 @@ class ProbabilityThreshold(DecisionFunction):
                 "Chosen index %d is out of bounds for "
                 "probability tensor of size %d.", chosen_index,
                 probabilities.shape[0])
-            return BacktrackDecision(False)
+            return Outcome(False)
 
         chosen_probability = probabilities[chosen_index].item()
         if chosen_probability < self.minimum_probability:
-            return BacktrackDecision(True, self.backtrack_count)
+            return Outcome(True, self.backtrack_count)
 
-        return BacktrackDecision(False)
+        return Outcome(False)
 
 
-class EntropyThreshold(DecisionFunction):
+class EntropyThreshold(Operator):
 
     def __init__(self,
                  maximum_entropy: float = 2.5,
@@ -115,18 +115,18 @@ class EntropyThreshold(DecisionFunction):
     def required_inputs(self) -> Set[Key[Any]]:
         return {PROBABILITIES}
 
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         probabilities = context[PROBABILITIES]
         entropy = -(probabilities *
                     torch.log(probabilities + 1e-9)).sum().item()
 
         if entropy > self.max_entropy:
-            return BacktrackDecision(True, self.backtrack_count)
+            return Outcome(True, self.backtrack_count)
 
-        return BacktrackDecision(False)
+        return Outcome(False)
 
 
-class ProbabilityMargin(DecisionFunction):
+class ProbabilityMargin(Operator):
 
     def __init__(self,
                  minimum_margin: float = 0.05,
@@ -144,24 +144,24 @@ class ProbabilityMargin(DecisionFunction):
     def required_inputs(self) -> Set[Key[Any]]:
         return {PROBABILITIES}
 
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         probabilities = context[PROBABILITIES]
 
         if probabilities.shape[0] < 2:
             logger.warning("Cannot calculate margin for distribution < 2 "
                            "elements.")
-            return BacktrackDecision(False)
+            return Outcome(False)
 
         top_probabilities, _ = torch.topk(probabilities, k=2)
         margin = (top_probabilities[0] - top_probabilities[1]).item()
 
         if margin < self.minimum_margin:
-            return BacktrackDecision(True, self.backtrack_count)
+            return Outcome(True, self.backtrack_count)
 
-        return BacktrackDecision(False)
+        return Outcome(False)
 
 
-class ProbabilityDrop(DecisionFunction):
+class ProbabilityDrop(Operator):
 
     def __init__(self,
                  minimum_margin: float = 2.0,
@@ -180,7 +180,7 @@ class ProbabilityDrop(DecisionFunction):
     def required_inputs(self) -> Set[Key[Any]]:
         return {PROBABILITIES, CHOSEN_INDEX}
 
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         probabilities = context[PROBABILITIES]
         chosen_index = context[CHOSEN_INDEX]
 
@@ -190,17 +190,17 @@ class ProbabilityDrop(DecisionFunction):
                 "probability tensor of size %d.", chosen_index,
                 probabilities.shape[0])
             self._last_probability = None
-            return BacktrackDecision(False)
+            return Outcome(False)
 
         chosen_probability = probabilities[chosen_index].item()
 
         if self._dropped_below_threshold(chosen_probability):
             self.reset()
-            return BacktrackDecision(True, self.backtrack_count)
+            return Outcome(True, self.backtrack_count)
 
         self._last_probability = chosen_probability
 
-        return BacktrackDecision(False)
+        return Outcome(False)
 
     def reset(self) -> None:
         self._last_probability = None
@@ -210,7 +210,7 @@ class ProbabilityDrop(DecisionFunction):
                 > chosen_probability * self.minimum_margin)
 
 
-class ProbabilityTrend(DecisionFunction):
+class ProbabilityTrend(Operator):
 
     def __init__(self,
                  window_size: int = 10,
@@ -235,18 +235,18 @@ class ProbabilityTrend(DecisionFunction):
     def required_inputs(self) -> Set[Key[Any]]:
         return {PROBABILITIES, CHOSEN_INDEX}
 
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         probabilities = context[PROBABILITIES]
         chosen_index = context[CHOSEN_INDEX]
         chosen_probability = probabilities[chosen_index].item()
 
         if (self._has_enough_elements_for_window()
                 and self._dropped_below_mean(chosen_probability)):
-            return BacktrackDecision(True, self.backtrack_count)
+            return Outcome(True, self.backtrack_count)
 
         self._history_window.append(chosen_probability)
 
-        return BacktrackDecision(False)
+        return Outcome(False)
 
     def reset(self) -> None:
         self._history_window.clear()
@@ -263,7 +263,7 @@ class ProbabilityTrend(DecisionFunction):
         return sum(self._history_window) / len(self._history_window)
 
 
-class Repetition(DecisionFunction):
+class Repetition(Operator):
 
     def __init__(self, maximum_repeats: int = 3) -> None:
         if maximum_repeats < 1:
@@ -277,7 +277,7 @@ class Repetition(DecisionFunction):
     def required_inputs(self) -> Set[Key[Any]]:
         return {CHOSEN_OUTPUT}
 
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         chosen_output = context[CHOSEN_OUTPUT]
 
         if chosen_output == self._last_chosen_output:
@@ -288,9 +288,9 @@ class Repetition(DecisionFunction):
         if self._exceeds_maximum_repeats():
             steps_to_remove = self._number_of_repeats
             self.reset()
-            return BacktrackDecision(True, steps_to_remove)
+            return Outcome(True, steps_to_remove)
 
-        return BacktrackDecision(False)
+        return Outcome(False)
 
     def reset(self) -> None:
         self._last_chosen_output = None
@@ -304,7 +304,7 @@ class Repetition(DecisionFunction):
         return self._number_of_repeats > self.maximum_repeats
 
 
-class NGramOverlap(DecisionFunction):
+class NGramOverlap(Operator):
 
     def __init__(self, ngram_size: int = 4) -> None:
         if ngram_size < 2:
@@ -319,7 +319,7 @@ class NGramOverlap(DecisionFunction):
     def required_inputs(self) -> Set[Key[Any]]:
         return {CHOSEN_OUTPUT}
 
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         chosen_output = context[CHOSEN_OUTPUT]
 
         self._current_ngram.append(chosen_output)
@@ -327,16 +327,16 @@ class NGramOverlap(DecisionFunction):
         if len(self._current_ngram) < self.ngram_size:
             logger.warning("Not enough history to form two n-grams for "
                            "comparison.")
-            return BacktrackDecision(False)
+            return Outcome(False)
 
         current_ngram = tuple(self._current_ngram)
 
         if current_ngram in self._seen_ngrams:
             self.reset()
-            return BacktrackDecision(True, self.ngram_size)
+            return Outcome(True, self.ngram_size)
 
         self._seen_ngrams.add(current_ngram)
-        return BacktrackDecision(False)
+        return Outcome(False)
 
     def reset(self) -> None:
         self._current_ngram.clear()
@@ -346,7 +346,7 @@ class NGramOverlap(DecisionFunction):
         self._current_ngram.append(chosen_output)
 
 
-class LogitThreshold(DecisionFunction):
+class LogitThreshold(Operator):
 
     def __init__(self,
                  minimum_logit: int = -20,
@@ -361,7 +361,7 @@ class LogitThreshold(DecisionFunction):
     def required_inputs(self) -> Set[Key[Any]]:
         return {LOGITS, CHOSEN_INDEX}
 
-    def decide(self, context: Context) -> BacktrackDecision:
+    def decide(self, context: Context) -> Outcome:
         logits = context[LOGITS]
         chosen_token_index = context[CHOSEN_INDEX]
 
@@ -369,11 +369,11 @@ class LogitThreshold(DecisionFunction):
             logger.warning(
                 "Chosen token index %d is out of bounds for logit "
                 "tensor of size %d.", chosen_token_index, logits.shape[0])
-            return BacktrackDecision(False)
+            return Outcome(False)
 
         chosen_token_logit = logits[chosen_token_index].item()
 
         if chosen_token_logit < self.minimum_logit:
-            return BacktrackDecision(True, self.backtrack_count)
+            return Outcome(True, self.backtrack_count)
 
-        return BacktrackDecision(False)
+        return Outcome(False)

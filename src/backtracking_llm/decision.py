@@ -38,7 +38,7 @@ class Context:
 
 
 @dataclass(frozen=True)
-class Outcome:
+class BacktrackDecision:
     should_backtrack: bool
     tokens_to_remove: int = 0
 
@@ -50,8 +50,13 @@ class Outcome:
 
 class DecisionFunction(ABC):
 
+    @property
     @abstractmethod
-    def __call__(self, z: Tensor, p: Tensor, i_chosen: int, y_hat: int) -> int:
+    def required_inputs(self) -> Set[Key[Any]]:
+        pass
+
+    @abstractmethod
+    def decide(self, context: Context) -> BacktrackDecision:
         pass
 
     def reset(self) -> None:

@@ -25,6 +25,12 @@ CHOSEN_INDEX = Key[int]("CHOSEN_INDEX")
 
 class Context:
 
+    @classmethod
+    def from_data(cls, data: Dict[Key[Any], Any]) -> "Context":
+        context = cls()
+        context._store = data.copy()
+        return context
+
     def __init__(self) -> None:
         self._store: Dict[Key[Any], Any] = {}
 

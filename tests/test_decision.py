@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 
 from backtracking_llm.decision import (
+    Context,
     EntropyThreshold,
     LogitThreshold,
     NGramOverlap,
@@ -16,23 +17,27 @@ from backtracking_llm.decision import (
     ProbabilityThreshold,
     ProbabilityTrend,
     Repetition,
+    PROBABILITIES,
+    LOGITS,
+    CHOSEN_OUTPUT,
+    CHOSEN_INDEX,
 )
 
 
 @pytest.fixture
-def base_z() -> Tensor:
+def base_logits() -> Tensor:
     return torch.tensor([-2.0, 2.5, -0.9, -0.4])
 
 
 @pytest.fixture
-def base_p(base_z: Tensor) -> Tensor:
-    return torch.softmax(base_z, dim=-1)
+def base_probabilities(base_logits: Tensor) -> Tensor:
+    return torch.softmax(base_logits, dim=-1)
 
 
 def test_default_reset_do_not_fail():
-    delta = ProbabilityThreshold()
+    operator = ProbabilityThreshold()
     try:
-        delta.reset()
+        operator.reset()
     except Exception as e:
         pytest.fail(f"Default reset method raised an unexpected error: {e}")
 
@@ -40,7 +45,7 @@ def test_default_reset_do_not_fail():
 class TestProbabilityThreshold:
 
     @pytest.mark.parametrize(
-        "p_min, backtrack_k, should_raise",
+        "minimum_probability, backtrack_count, should_raise",
         [
             (0.1, 1, False),
             (0.99, 10, False),
@@ -49,191 +54,289 @@ class TestProbabilityThreshold:
             (0.1, 0, True),
         ],
     )
-    def test_init(self, p_min, backtrack_k, should_raise):
+    def test_init(self, minimum_probability, backtrack_count, should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                ProbabilityThreshold(p_min, backtrack_k)
+                ProbabilityThreshold(minimum_probability, backtrack_count)
         else:
-            delta = ProbabilityThreshold(p_min, backtrack_k)
-            assert delta.p_min == p_min
-            assert delta.backtrack_k == backtrack_k
+            delta = ProbabilityThreshold(minimum_probability, backtrack_count)
+            assert delta.minimum_probability == minimum_probability
+            assert delta.backtrack_count == backtrack_count
 
-    def test_call_triggers_backtrack(self, base_z, base_p):
-        delta = ProbabilityThreshold(0.05, 3)
-        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=123)
-        assert result == 3
+    def test_call_triggers_backtrack(self, base_probabilities):
+        operator = ProbabilityThreshold(0.05, 3)
+        context = Context.from_data({
+            PROBABILITIES: base_probabilities,
+            CHOSEN_INDEX: 0
+        })
 
-    def test_call_no_backtrack(self, base_z, base_p):
-        delta = ProbabilityThreshold(0.05, 3)
-        result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=456)
-        assert result == 0
+        result = operator.decide(context)
 
-    def test_call_out_of_bounds_index(self, base_p, base_z, caplog):
-        delta = ProbabilityThreshold()
+        assert result.should_backtrack is True
+        assert result.steps_to_remove == 3
+
+    def test_call_no_backtrack(self, base_probabilities):
+        operator = ProbabilityThreshold(0.05, 3)
+        context = Context.from_data({
+            PROBABILITIES: base_probabilities,
+            CHOSEN_INDEX: 1
+        })
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+
+    def test_call_out_of_bounds_index(self, base_probabilities, caplog):
+        operator = ProbabilityThreshold()
+        context = Context.from_data({
+            PROBABILITIES: base_probabilities,
+            CHOSEN_INDEX: 99
+        })
+
         with caplog.at_level(logging.WARNING):
-            result = delta(z=base_z, p=base_p, i_chosen=99, y_hat=789)
-        assert result == 0
+            result = operator.decide(context)
+
+        assert result.should_backtrack is False
         assert "out of bounds" in caplog.text
 
 
 class TestEntropyThreshold:
 
     @pytest.mark.parametrize(
-        "h_max, backtrack_k, should_raise",
+        "maximum_entropy, backtrack_count, should_raise",
         [
             (2.5, 2, False),
             (0.0, 1, True),
             (2.5, 0, True),
         ],
     )
-    def test_init(self, h_max, backtrack_k, should_raise):
+    def test_init(self, maximum_entropy, backtrack_count, should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                EntropyThreshold(h_max=h_max, backtrack_k=backtrack_k)
+                EntropyThreshold(maximum_entropy, backtrack_count)
         else:
-            delta = EntropyThreshold(h_max=h_max, backtrack_k=backtrack_k)
-            assert delta.h_max == h_max
-            assert delta.backtrack_k == backtrack_k
+            delta = EntropyThreshold(maximum_entropy, backtrack_count)
+            assert delta.maximum_entropy == maximum_entropy
+            assert delta.backtrack_count == backtrack_count
 
-    def test_call_triggers_backtrack(self, base_z):
-        p_high_h = torch.tensor([0.25, 0.25, 0.25, 0.25])
-        delta = EntropyThreshold(1.0, 2)
-        result = delta(z=base_z, p=p_high_h, i_chosen=0, y_hat=123)
-        assert result == 2
+    def test_call_triggers_backtrack(self):
+        high_entropy_probabilities = torch.tensor([0.25, 0.25, 0.25, 0.25])
+        operator = EntropyThreshold(1.0, 2)
+        context = Context.from_data({
+            PROBABILITIES: high_entropy_probabilities,
+        })
 
-    def test_call_no_backtrack(self, base_z, base_p):
-        delta = EntropyThreshold(1.0, 2)
-        result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=456)
-        assert result == 0
+        result = operator.decide(context)
+
+        assert result.should_backtrack is True
+        assert result.steps_to_remove == 2
+
+    def test_call_no_backtrack(self, base_probabilities):
+        operator = EntropyThreshold(1.0, 2)
+        context = Context.from_data({PROBABILITIES: base_probabilities})
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
 
 
 class TestProbabilityMargin:
 
     @pytest.mark.parametrize(
-        "m_min, backtrack_k, should_raise",
+        "minimum_margin, backtrack_count, should_raise",
         [
             (0.5, 2, False),
             (-0.5, 1, True),
             (0.5, -1, True),
         ],
     )
-    def test_init(self, m_min, backtrack_k, should_raise):
+    def test_init(self, minimum_margin, backtrack_count, should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                ProbabilityMargin(m_min, backtrack_k)
+                ProbabilityMargin(minimum_margin, backtrack_count)
         else:
-            delta = ProbabilityMargin(m_min, backtrack_k)
-            assert delta.m_min == m_min
-            assert delta.backtrack_k == backtrack_k
+            delta = ProbabilityMargin(minimum_margin, backtrack_count)
+            assert delta.minimum_margin == minimum_margin
+            assert delta.backtrack_count == backtrack_count
 
-    def test_call_triggers_backtrack(self, base_z):
-        p_with_close_top_k = torch.tensor([0.4, 0.38, 0.12, 0.1])
-        delta = ProbabilityMargin(0.05, 1)
-        result = delta(z=base_z, p=p_with_close_top_k, i_chosen=0, y_hat=123)
-        assert result == 1
+    def test_call_triggers_backtrack(self):
+        probabilities_with_close_top_k = torch.tensor([0.4, 0.38, 0.12, 0.1])
+        operator = ProbabilityMargin(0.05, 1)
+        context = Context.from_data(
+            {PROBABILITIES: probabilities_with_close_top_k})
 
-    def test_call_no_backtrack(self, base_z, base_p):
-        delta = ProbabilityMargin(0.1, 1)
-        result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=456)
-        assert result == 0
+        result = operator.decide(context)
 
-    def test_call_small_vocab(self, base_z, caplog):
-        small_p = torch.tensor([1.0])
-        delta = ProbabilityMargin()
+        assert result.should_backtrack is True
+        assert result.steps_to_remove == 1
+
+    def test_call_no_backtrack(self, base_probabilities):
+        operator = ProbabilityMargin(0.1, 1)
+        context = Context.from_data({PROBABILITIES: base_probabilities})
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+
+    def test_call_small_vocab(self, caplog):
+        small_vocab_probabilities = torch.tensor([1.0])
+        operator = ProbabilityMargin()
+        context = Context.from_data({PROBABILITIES: small_vocab_probabilities})
+
         with caplog.at_level(logging.WARNING):
-            result = delta(z=base_z, p=small_p, i_chosen=99, y_hat=789)
-        assert result == 0
-        assert "fewer than 2" in caplog.text
+            result = operator.decide(context)
+
+        assert result.should_backtrack is False
+        assert "< 2" in caplog.text
 
 
 class TestProbabilityDrop:
 
     @pytest.mark.parametrize(
-        "m_min, backtrack_k, should_raise",
+        "minimum_margin, backtrack_count, should_raise",
         [
             (2, 2, False),
             (0, 1, True),
             (1, -1, True),
         ],
     )
-    def test_init(self, m_min, backtrack_k, should_raise):
+    def test_init(self, minimum_margin, backtrack_count, should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                ProbabilityDrop(m_min, backtrack_k)
+                ProbabilityDrop(minimum_margin, backtrack_count)
         else:
-            delta = ProbabilityDrop(m_min, backtrack_k)
-            assert delta.m_min == m_min
-            assert delta.backtrack_k == backtrack_k
+            operator = ProbabilityDrop(minimum_margin, backtrack_count)
+            assert operator.minimum_margin == minimum_margin
+            assert operator.backtrack_count == backtrack_count
 
-    def test_call_no_backtrack_on_first_step(self, base_z, base_p):
-        delta = ProbabilityDrop()
-        result = delta(z=base_z, p=base_p, i_chosen=1, y_hat=123)
-        assert result == 0
-        assert delta._p_last is not None
-        assert delta._p_last == pytest.approx(base_p[1].item())
+    def test_call_no_backtrack_on_first_step(self, base_probabilities):
+        operator = ProbabilityDrop()
+        context = Context.from_data({
+            PROBABILITIES: base_probabilities,
+            CHOSEN_INDEX: 1
+        })
 
-    def test_call_triggers_backtrack_on_sharp_drop(self, base_z):
-        delta = ProbabilityDrop(2.0, 2)
-        p_high = torch.tensor([0.1, 0.8, 1.0])
-        delta(z=base_z, p=p_high, i_chosen=1, y_hat=456)
-        assert delta._p_last == pytest.approx(0.8)
+        result = operator.decide(context)
 
-        p_low = torch.tensor([0.3, 0.4, 0.3])
-        result = delta(z=base_z, p=p_low, i_chosen=0, y_hat=789)
+        assert result.should_backtrack is False
+        assert operator._last_probability is not None
+        assert operator._last_probability == pytest.approx(
+            base_probabilities[1].item())
 
-        assert result == 2
+    def test_call_triggers_backtrack_on_sharp_drop(self):
+        operator = ProbabilityDrop(2.0, 2)
+        high_probabilities = torch.tensor([0.1, 0.8, 1.0])
+        context = Context.from_data({
+            PROBABILITIES: high_probabilities,
+            CHOSEN_INDEX: 1
+        })
 
-    def test_state_resets_after_backtrack_trigger(self, base_z):
-        delta = ProbabilityDrop(2.0, 1)
-        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=123)
-        assert delta._p_last is not None
+        operator.decide(context)
 
-        delta(z=base_z, p=torch.tensor([0.3, 0.7]), i_chosen=0, y_hat=456)
-        assert delta._p_last is None
+        assert operator._last_probability == pytest.approx(0.8)
 
-    def test_call_no_backtrack_on_small_drop(self, base_z):
-        delta = ProbabilityDrop(2.0, 1)
-        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=789)
-        assert delta._p_last == pytest.approx(0.8)
+        low_probabilities = torch.tensor([0.3, 0.4, 0.3])
+        context = Context.from_data({
+            PROBABILITIES: low_probabilities,
+            CHOSEN_INDEX: 0
+        })
 
-        result = delta(z=base_z,
-                       p=torch.tensor([0.5, 0.5]),
-                       i_chosen=0,
-                       y_hat=123)
-        assert result == 0
+        result = operator.decide(context)
 
-        assert delta._p_last == pytest.approx(0.5)
+        assert result.should_backtrack is True
+        assert result.steps_to_remove == 2
 
-    def test_call_no_backtrack_on_increase(self, base_z):
-        delta = ProbabilityDrop(2.0, 1)
-        delta(z=base_z, p=torch.tensor([0.3, 0.7]), i_chosen=0, y_hat=456)
-        assert delta._p_last == pytest.approx(0.3)
+    def test_state_resets_after_backtrack_trigger(self):
+        operator = ProbabilityDrop(2.0, 1)
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.8, 0.2]),
+            CHOSEN_INDEX: 0
+        })
 
-        result = delta(z=base_z,
-                       p=torch.tensor([0.8, 0.2]),
-                       i_chosen=0,
-                       y_hat=789)
-        assert result == 0
-        assert delta._p_last == pytest.approx(0.8)
+        operator.decide(context)
 
-    def test_call_out_of_bounds_index_resets_state(self, base_z, base_p,
+        assert operator._last_probability is not None
+
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.3, 0.7]),
+            CHOSEN_INDEX: 0
+        })
+        operator.decide(context)
+
+        assert operator._last_probability is None
+
+    def test_call_no_backtrack_on_small_drop(self):
+        operator = ProbabilityDrop(2.0, 1)
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.8, 0.2]),
+            CHOSEN_INDEX: 0
+        })
+
+        operator.decide(context)
+
+        assert operator._last_probability == pytest.approx(0.8)
+
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.5, 0.5]),
+            CHOSEN_INDEX: 0
+        })
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+
+        assert operator._last_probability == pytest.approx(0.5)
+
+    def test_call_no_backtrack_on_increase(self):
+        operator = ProbabilityDrop(2.0, 1)
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.3, 0.7]),
+            CHOSEN_INDEX: 0
+        })
+
+        operator.decide(context)
+
+        assert operator._last_probability == pytest.approx(0.3)
+
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.8, 0.2]),
+            CHOSEN_INDEX: 0
+        })
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+        assert operator._last_probability == pytest.approx(0.8)
+
+    def test_call_out_of_bounds_index_resets_state(self, base_probabilities,
                                                    caplog):
-        delta = ProbabilityDrop()
-        delta(z=base_z, p=base_p, i_chosen=1, y_hat=123)
-        assert delta._p_last is not None
+        operator = ProbabilityDrop()
+        context = Context.from_data({
+            PROBABILITIES: base_probabilities,
+            CHOSEN_INDEX: 0
+        })
+
+        operator.decide(context)
+
+        assert operator._last_probability is not None
+
+        context = Context.from_data({
+            PROBABILITIES: base_probabilities,
+            CHOSEN_INDEX: 99
+        })
 
         with caplog.at_level(logging.WARNING):
-            result = delta(z=base_z, p=base_p, i_chosen=99, y_hat=456)
+            result = operator.decide(context)
 
-        assert result == 0
+        assert result.should_backtrack is False
         assert "out of bounds" in caplog.text
-        assert delta._p_last is None
+        assert operator._last_probability is None
 
 
 class TestProbabilityTrend:
 
     @pytest.mark.parametrize(
-        "w, m_min, backtrack_k, should_raise",
+        "window_size, minimum_margin, backtrack_count, should_raise",
         [
             (10, 0.5, 2, False),
             (1, 0.5, 2, True),
@@ -241,239 +344,369 @@ class TestProbabilityTrend:
             (10, 0.5, 0, True),
         ],
     )
-    def test_init(self, w, m_min, backtrack_k, should_raise):
+    def test_init(self, window_size, minimum_margin, backtrack_count,
+                  should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                ProbabilityTrend(w, m_min, backtrack_k)
+                ProbabilityTrend(window_size, minimum_margin, backtrack_count)
         else:
-            delta = ProbabilityTrend(w, m_min, backtrack_k)
-            assert delta.w == w
-            assert delta.m_min == m_min
-            assert delta.backtrack_k == backtrack_k
+            operator = ProbabilityTrend(window_size, minimum_margin,
+                                        backtrack_count)
+            assert operator.window_size == window_size
+            assert operator.minimum_margin == minimum_margin
+            assert operator.backtrack_count == backtrack_count
 
-    def test_call_state_management(self, base_z):
-        delta = ProbabilityTrend(4, 0.5, 2)
-        result = delta(z=base_z,
-                       p=torch.tensor([0.9, 0.1]),
-                       i_chosen=0,
-                       y_hat=1)
-        assert result == 0
-        assert len(delta._history) == 1
-        assert delta._history == pytest.approx([0.9])
+    def test_call_state_management(self):
+        operator = ProbabilityTrend(4, 0.5, 2)
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.9, 0.1]),
+            CHOSEN_INDEX: 0
+        })
 
-        result = delta(z=base_z,
-                       p=torch.tensor([0.8, 0.2]),
-                       i_chosen=0,
-                       y_hat=1)
-        assert result == 0
-        assert len(delta._history) == 2
-        assert delta._history == pytest.approx([0.9, 0.8])
+        result = operator.decide(context)
 
-    def test_call_backtrack_on_drop(self, base_z):
-        delta = ProbabilityTrend(2, 0.5, 1)
-        delta(z=base_z, p=torch.tensor([0.9, 0.1]), i_chosen=0, y_hat=1)
-        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=1)
-        assert len(delta._history) == 2
-        assert delta._history == pytest.approx([0.9, 0.8])
+        assert result.should_backtrack is False
+        assert len(operator._history_window) == 1
+        assert operator._history_window == pytest.approx([0.9])
 
-        result = delta(z=base_z,
-                       p=torch.tensor([0.1, 0.9]),
-                       i_chosen=0,
-                       y_hat=1)
-        assert result == 1
-        assert len(delta._history) == 2
-        assert delta._history == pytest.approx([0.9, 0.8])
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.8, 0.2]),
+            CHOSEN_INDEX: 0
+        })
 
-    def test_call_no_backtrack_on_increase(self, base_z):
-        delta = ProbabilityTrend(2, 0.5, 1)
-        delta(z=base_z, p=torch.tensor([0.9, 0.1]), i_chosen=0, y_hat=1)
-        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=1)
-        assert len(delta._history) == 2
-        assert delta._history == pytest.approx([0.9, 0.8])
+        result = operator.decide(context)
 
-        result = delta(z=base_z,
-                       p=torch.tensor([0.1, 0.9]),
-                       i_chosen=1,
-                       y_hat=2)
-        assert result == 0
+        assert result.should_backtrack is False
+        assert len(operator._history_window) == 2
+        assert operator._history_window == pytest.approx([0.9, 0.8])
 
-    def test_call_no_backtrack_rolls_window(self, base_z):
-        delta = ProbabilityTrend(2, 0.5, 1)
-        delta(z=base_z, p=torch.tensor([0.9, 0.1]), i_chosen=0, y_hat=1)
-        delta(z=base_z, p=torch.tensor([0.8, 0.2]), i_chosen=0, y_hat=1)
-        assert len(delta._history) == 2
-        assert delta._history == pytest.approx([0.9, 0.8])
+    def test_call_backtrack_on_drop(self):
+        operator = ProbabilityTrend(2, 0.5, 1)
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.9, 0.1]),
+            CHOSEN_INDEX: 0
+        })
 
-        delta(z=base_z, p=torch.tensor([0.1, 0.9]), i_chosen=1, y_hat=2)
-        assert len(delta._history) == 2
-        assert delta._history == pytest.approx([0.8, 0.9])
+        operator.decide(context)
 
-    def test_reset_clears_window(self, base_z, base_p):
-        delta = ProbabilityTrend(2, 0.5, 1)
-        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        assert len(delta._history) == 2
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.8, 0.2]),
+            CHOSEN_INDEX: 0
+        })
 
-        delta.reset()
-        assert len(delta._history) == 0
+        operator.decide(context)
+
+        assert len(operator._history_window) == 2
+        assert operator._history_window == pytest.approx([0.9, 0.8])
+
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.1, 0.9]),
+            CHOSEN_INDEX: 0
+        })
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is True
+        assert result.steps_to_remove == 1
+        assert len(operator._history_window) == 2
+        assert operator._history_window == pytest.approx([0.9, 0.8])
+
+    def test_call_no_backtrack_on_increase(self):
+        operator = ProbabilityTrend(2, 0.5, 1)
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.9, 0.1]),
+            CHOSEN_INDEX: 0
+        })
+
+        operator.decide(context)
+
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.8, 0.2]),
+            CHOSEN_INDEX: 0
+        })
+
+        operator.decide(context)
+
+        assert len(operator._history_window) == 2
+        assert operator._history_window == pytest.approx([0.9, 0.8])
+
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.1, 0.9]),
+            CHOSEN_INDEX: 1
+        })
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+
+    def test_call_no_backtrack_rolls_window(self):
+        operator = ProbabilityTrend(2, 0.5, 1)
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.9, 0.1]),
+            CHOSEN_INDEX: 0,
+        })
+
+        operator.decide(context)
+
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.8, 0.2]),
+            CHOSEN_INDEX: 0,
+        })
+
+        operator.decide(context)
+
+        assert len(operator._history_window) == 2
+        assert operator._history_window == pytest.approx([0.9, 0.8])
+
+        context = Context.from_data({
+            PROBABILITIES: torch.tensor([0.1, 0.9]),
+            CHOSEN_INDEX: 1,
+        })
+
+        operator.decide(context)
+
+        assert len(operator._history_window) == 2
+        assert operator._history_window == pytest.approx([0.8, 0.9])
+
+    def test_reset_clears_window(self, base_probabilities):
+        operator = ProbabilityTrend(2, 0.5, 1)
+        context = Context.from_data({
+            PROBABILITIES: base_probabilities,
+            CHOSEN_INDEX: 0
+        })
+
+        operator.decide(context)
+        operator.decide(context)
+
+        assert len(operator._history_window) == 2
+
+        operator.reset()
+
+        assert len(operator._history_window) == 0
 
 
 class TestRepetition:
 
     @pytest.mark.parametrize(
-        "max_n, should_raise",
+        "max_repeats, should_raise",
         [
             (3, False),
             (0, True),
         ],
     )
-    def test_init(self, max_n, should_raise):
+    def test_init(self, max_repeats, should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                Repetition(max_n)
+                Repetition(max_repeats)
         else:
-            delta = Repetition(max_n)
-            assert delta.max_n == max_n
+            operator = Repetition(max_repeats)
+            assert operator.maximum_repeats == max_repeats
 
-    def test_call_state_management(self, base_z, base_p):
-        delta = Repetition(3)
-        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        assert result == 0
-        assert delta._v_last == 1
-        assert delta._n_repeats == 1
+    def test_call_state_management(self):
+        operator = Repetition(3)
+        context = Context.from_data({
+            CHOSEN_OUTPUT: 1,
+        })
 
-        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        assert result == 0
-        assert delta._v_last == 1
-        assert delta._n_repeats == 2
+        result = operator.decide(context)
 
-    def test_call_repetition_triggers_backtrack(self, base_z, base_p):
-        delta = Repetition(2)
+        assert result.should_backtrack is False
+        assert operator._last_chosen_output == 1
+        assert operator._number_of_repeats == 1
 
-        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        assert result == 0
-        assert delta._n_repeats == 1
+        result = operator.decide(context)
 
-        result = delta(z=base_p, p=base_p, i_chosen=0, y_hat=1)
-        assert result == 0
-        assert delta._n_repeats == 2
+        assert result.should_backtrack is False
+        assert operator._last_chosen_output == 1
+        assert operator._number_of_repeats == 2
 
-        result = delta(z=base_p, p=base_p, i_chosen=0, y_hat=1)
-        assert result == 3
+    def test_call_repetition_triggers_backtrack(self):
+        operator = Repetition(2)
+        context = Context.from_data({CHOSEN_OUTPUT: 1})
 
-        assert delta._n_repeats == 0
+        result = operator.decide(context)
+        assert result.should_backtrack is False
+        assert operator._number_of_repeats == 1
 
-    def test_call_counter_resets_on_new_token(self, base_z, base_p):
-        delta = Repetition(2)
+        result = operator.decide(context)
 
-        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        assert delta._n_repeats == 1
-        assert delta._v_last == 1
+        assert result.should_backtrack is False
+        assert operator._number_of_repeats == 2
 
-        delta(z=base_z, p=base_p, i_chosen=1, y_hat=2)
-        assert delta._n_repeats == 1
-        assert delta._v_last == 2
+        result = operator.decide(context)
 
-    def test_reset_clears_window(self, base_z, base_p):
-        delta = Repetition(2)
-        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        assert delta._n_repeats == 2
+        assert result.should_backtrack is True
+        assert result.steps_to_remove == 3
 
-        delta.reset()
-        assert delta._n_repeats == 0
+        assert operator._number_of_repeats == 0
+
+    def test_call_counter_resets_on_new_token(self):
+        operator = Repetition(2)
+        context = Context.from_data({CHOSEN_OUTPUT: 0})
+
+        operator.decide(context)
+
+        assert operator._number_of_repeats == 1
+        assert operator._last_chosen_output == 0
+
+        context = Context.from_data({CHOSEN_OUTPUT: 1})
+
+        operator.decide(context)
+
+        assert operator._number_of_repeats == 1
+        assert operator._last_chosen_output == 1
+
+    def test_reset_clears_window(self):
+        operator = Repetition(2)
+        context = Context.from_data({CHOSEN_OUTPUT: 0})
+
+        operator.decide(context)
+        operator.decide(context)
+
+        assert operator._number_of_repeats == 2
+
+        operator.reset()
+
+        assert operator._number_of_repeats == 0
 
 
 class TestNGramOverlap:
 
     @pytest.mark.parametrize(
-        "n, should_raise",
+        "ngram_size, should_raise",
         [
             (3, False),
             (0, True),
         ],
     )
-    def test_init(self, n, should_raise):
+    def test_init(self, ngram_size, should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                NGramOverlap(n)
+                NGramOverlap(ngram_size)
         else:
-            delta = NGramOverlap(n)
-            assert delta.n == n
+            operator = NGramOverlap(ngram_size)
+            assert operator.ngram_size == ngram_size
 
-    def test_call_state_management(self, base_z, base_p):
-        delta = NGramOverlap(2)
-        v_s = [10, 20, 30]
+    def test_call_state_management(self):
+        operator = NGramOverlap(2)
+        outputs = [10, 20, 30]
 
-        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[0]) == 0
-        assert delta._window == pytest.approx([10])
+        context = Context.from_data({CHOSEN_OUTPUT: outputs[0]})
 
-        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[1]) == 0
-        assert delta._window == pytest.approx([10, 20])
+        result = operator.decide(context)
 
-        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[2]) == 0
-        assert list(delta._seen_ngrams) == pytest.approx([(20, 30), (10, 20)])
-        assert delta._window == pytest.approx([20, 30])
+        assert result.should_backtrack is False
+        assert operator._current_ngram == pytest.approx([10])
 
-    def test_call_backtrack_on_ngram_repeat(self, base_z, base_p):
-        delta = NGramOverlap(2)
-        v_s = [10, 20, 30, 10, 20]
+        context = Context.from_data({CHOSEN_OUTPUT: outputs[1]})
 
-        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[0]) == 0
-        assert len(delta._window) == 1
+        result = operator.decide(context)
 
-        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[1]) == 0
-        assert len(delta._window) == 2
+        assert result.should_backtrack is False
+        assert operator._current_ngram == pytest.approx([10, 20])
 
-        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[2]) == 0
-        assert len(delta._window) == 2
+        context = Context.from_data({CHOSEN_OUTPUT: outputs[2]})
 
-        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[3]) == 0
-        assert len(delta._window) == 2
+        result = operator.decide(context)
 
-        assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v_s[4]) == 2
-        assert len(delta._window) == 0
+        assert result.should_backtrack is False
+        assert list(operator._seen_ngrams) == pytest.approx([(20, 30),
+                                                             (10, 20)])
+        assert operator._current_ngram == pytest.approx([20, 30])
 
-    def test_call_no_backtrack_on_unique_sequence(self, base_z, base_p):
-        delta = NGramOverlap(3)
-        v_s = [10, 20, 30, 40, 50, 60]
-        for v in v_s:
-            assert delta(z=base_z, p=base_p, i_chosen=0, y_hat=v) == 0
+    def test_call_backtrack_on_ngram_repeat(self):
+        operator = NGramOverlap(2)
+        outputs = [10, 20, 30, 10, 20]
+
+        context = Context.from_data({CHOSEN_OUTPUT: outputs[0]})
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+        assert len(operator._current_ngram) == 1
+
+        context = Context.from_data({CHOSEN_OUTPUT: outputs[1]})
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+        assert len(operator._current_ngram) == 2
+
+        context = Context.from_data({CHOSEN_OUTPUT: outputs[2]})
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+        assert len(operator._current_ngram) == 2
+
+        context = Context.from_data({CHOSEN_OUTPUT: outputs[3]})
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is False
+        assert len(operator._current_ngram) == 2
+
+        context = Context.from_data({CHOSEN_OUTPUT: outputs[4]})
+
+        result = operator.decide(context)
+
+        assert result.should_backtrack is True
+        assert result.steps_to_remove == 2
+
+        assert len(operator._current_ngram) == 0
+
+    def test_call_no_backtrack_on_unique_sequence(self):
+        operator = NGramOverlap(3)
+        outputs = [10, 20, 30, 40, 50, 60]
+
+        for output in outputs:
+            context = Context.from_data({CHOSEN_OUTPUT: output})
+
+            result = operator.decide(context)
+
+            assert result.should_backtrack is False
 
 
 class TestLogitThreshold:
 
     @pytest.mark.parametrize(
-        "z_min, backtrack_k, should_raise",
+        "minimum_logit, backtrack_count, should_raise",
         [
             (20, 2, False),
             (20, 0, True),
         ],
     )
-    def test_init(self, z_min, backtrack_k, should_raise):
+    def test_init(self, minimum_logit, backtrack_count, should_raise):
         if should_raise:
             with pytest.raises(ValueError):
-                LogitThreshold(z_min, backtrack_k)
+                LogitThreshold(minimum_logit, backtrack_count)
         else:
-            delta = LogitThreshold(z_min, backtrack_k)
-            assert delta.z_min == z_min
-            assert delta.backtrack_k == backtrack_k
+            operator = LogitThreshold(minimum_logit, backtrack_count)
+            assert operator.minimum_logit == minimum_logit
+            assert operator.backtrack_count == backtrack_count
 
-    def test_call_triggers_backtrack(self, base_z, base_p):
-        delta = LogitThreshold(1, 3)
-        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        assert result == 3
+    def test_call_triggers_backtrack(self, base_logits):
+        operator = LogitThreshold(1, 3)
+        context = Context.from_data({LOGITS: base_logits, CHOSEN_INDEX: 0})
 
-    def test_call_no_backtrack(self, base_z, base_p):
-        delta = LogitThreshold(-3, 3)
-        result = delta(z=base_z, p=base_p, i_chosen=0, y_hat=1)
-        assert result == 0
+        result = operator.decide(context)
 
-    def test_call_out_of_bounds_index(self, base_z, base_p, caplog):
-        delta = LogitThreshold(1, 3)
+        assert result.should_backtrack is True
+        assert result.steps_to_remove == 3
+
+    def test_call_no_backtrack(self, base_logits):
+        operator = LogitThreshold(-3, 3)
+        context = Context.from_data({LOGITS: base_logits, CHOSEN_INDEX: 0})
+
+        result = operator.decide(context)
+        assert result.should_backtrack is False
+
+    def test_call_out_of_bounds_index(self, base_logits, caplog):
+        operator = LogitThreshold(1, 3)
+        context = Context.from_data({LOGITS: base_logits, CHOSEN_INDEX: 99})
 
         with caplog.at_level(logging.WARNING):
-            result = delta(z=base_z, p=base_p, i_chosen=99, y_hat=1)
+            result = operator.decide(context)
 
-        assert result == 0
+        assert result.should_backtrack is False
         assert "out of bounds" in caplog.text

@@ -37,9 +37,6 @@ class Context:
     def __getitem__(self, key: Key[T]) -> T:
         return self._store[key]
 
-    def __setitem__(self, key: Key[T], value: T) -> None:
-        self._store[key] = value
-
 
 @dataclass(frozen=True)
 class Outcome:

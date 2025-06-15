@@ -111,7 +111,7 @@ class EntropyThreshold(Operator):
         if backtrack_count < 1:
             raise ValueError("Backtrack count must be positive")
 
-        self.max_entropy = maximum_entropy
+        self.maximum_entropy = maximum_entropy
         self.backtrack_count = backtrack_count
 
     @property
@@ -123,7 +123,7 @@ class EntropyThreshold(Operator):
         entropy = -(probabilities *
                     torch.log(probabilities + 1e-9)).sum().item()
 
-        if entropy > self.max_entropy:
+        if entropy > self.maximum_entropy:
             return Outcome(True, self.backtrack_count)
 
         return Outcome(False)

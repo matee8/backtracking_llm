@@ -22,6 +22,8 @@ PROBABILITIES = Key[Tensor]("PROBABILITIES")
 CHOSEN_OUTPUT = Key[int]("CHOSEN_OUTPUT")
 CHOSEN_INDEX = Key[int]("CHOSEN_INDEX")
 
+class MissingContextDataError(KeyError):
+    pass
 
 class Context:
 
@@ -35,7 +37,12 @@ class Context:
         self._store: Dict[Key[Any], Any] = {}
 
     def __getitem__(self, key: Key[T]) -> T:
-        return self._store[key]
+        try:
+            return self._store[key]
+        except KeyError as e:
+            raise MissingContextDataError(f"Required data for key '{key.name}' "
+                                          "was not found in the context. Ensure"
+                                          " it is computed and provided.") from e
 
 
 @dataclass(frozen=True)

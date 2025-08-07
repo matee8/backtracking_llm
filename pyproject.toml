@@ -41,3 +41,11 @@ Issues = "https://github.com/matee8/backtracking_llm/issues"
 [build-system]
 requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.2.0",
+    "pylint>=3.3.7",
+    "pytest>=8.4.1",
+    "yapf>=0.43.0",
+]

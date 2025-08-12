@@ -42,10 +42,17 @@ Issues = "https://github.com/matee8/backtracking_llm/issues"
 requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
+
 [dependency-groups]
 dev = [
-    "pre-commit>=4.2.0",
-    "pylint>=3.3.7",
-    "pytest>=8.4.1",
+    "pre-commit>=4.0.1, <5.0.0",
+    "nodeenv>=1.7.0, <2.0.0", # pre-commit specifies >=0.11.1, which does not work.
+    "setuptools>=80.1.0, <81.0.0",
+    "pylint>=3.0.4, <4.0.0",
+    "pytest>=8.0.2, <9.0.0",
     "yapf>=0.43.0",
 ]

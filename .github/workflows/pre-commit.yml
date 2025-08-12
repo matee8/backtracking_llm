@@ -13,6 +13,6 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
     - name: Install pre-commit
-      run: python -m pip install pre-commit
+      run: python -m pip install pre-commit yapf pylint pytest
     - name: Run pre-commit hooks
       run: pre-commit run --all-files --show-diff-on-failure

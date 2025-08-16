@@ -101,3 +101,55 @@ class ProbabilityThreshold:
             return self.backtrack_count
 
         return 0
+
+
+class EntropyThreshold:
+    """An operator that backtracks when the entropy of the probabilities is too
+    high.
+
+    This decision function triggers a backtrack operation if the entropy of the
+    probabilities raises above a pre-configured threshold.
+
+    Attributes:
+        max_entropy: The entropy threshold above which backtracking is
+            triggered.
+        backtrack_count: The number of tokens to backtrack if the condition
+            is met.
+    """
+
+    def __init__(self,
+                 max_entropy: float = 0.2,
+                 backtrack_count: int = 2) -> None:
+        """Initializes the EntropyThreshold operator.
+
+        Args:
+            max_entropy: The entropy threshold. Must be a non-negative number.
+            backtrack_count: The number of tokens to remove when backtracking.
+                Must be a positive integer.
+
+        Raises:
+            ValueError: If `max_entropy` is negative, or if `backtrack_count` is
+                not positive.
+        """
+        if max_entropy < 0.0:
+            raise ValueError("`max_entropy` must be non-negative")
+
+        if backtrack_count < 1:
+            raise ValueError("`backtrack_count` must be positive")
+
+        self.max_entropy = max_entropy
+        self.backtrack_count = backtrack_count
+
+    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+                 token: str) -> int:
+        """Implements the Operator protocol by checking whether the probability
+        distribution's entropy is above a pre-configured threshold.
+        """
+        non_zero_probabilities = probabilities[probabilities > 0]
+
+        entropy = -(non_zero_probabilities * non_zero_probabilities.log()).sum()
+
+        if entropy.item() > self.max_entropy:
+            return self.backtrack_count
+
+        return 0

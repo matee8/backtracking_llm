@@ -4,7 +4,8 @@ import pytest
 import torch
 from torch import Tensor
 
-from backtracking_llm.decision import Never, ProbabilityThreshold
+from backtracking_llm.decision import (EntropyThreshold, Never,
+                                       ProbabilityThreshold)
 
 # pylint: disable=redefined-outer-name
 
@@ -27,6 +28,18 @@ def base_position() -> int:
 @pytest.fixture
 def base_token() -> str:
     return "hello"
+
+
+@pytest.fixture
+def high_entropy_probabilities() -> Tensor:
+    """Returns a uniform (high entropy) probability distribution."""
+    return torch.tensor([0.25, 0.25, 0.25, 0.25])
+
+
+@pytest.fixture
+def zero_entropy_probabilities() -> Tensor:
+    """Returns a certain (zero entropy) probability distribution."""
+    return torch.tensor([1.0, 0.0, 0.0, 0.0])
 
 
 def test_never_operator_always_returns_0(base_logits: Tensor,
@@ -91,3 +104,60 @@ def test_call_handles_out_of_bounds_position(caplog, base_logits: Tensor,
 
     assert result == 0
     assert "out of bounds" in caplog.text
+
+
+def test_entropy_threshold_triggers_backtrack_on_high_entropy(
+        base_logits: Tensor, high_entropy_probabilities: Tensor,
+        base_position: int, base_token: str) -> None:
+    op = EntropyThreshold(max_entropy=1.0, backtrack_count=3)
+
+    result = op(base_logits, high_entropy_probabilities, base_position,
+                base_token)
+
+    assert result == 3
+
+
+def test_entropy_threshold_does_not_backtrack_on_low_entropy(
+        base_logits: Tensor, base_probabilities: Tensor, base_position: int,
+        base_token: str) -> None:
+    op = EntropyThreshold(max_entropy=1.0, backtrack_count=2)
+
+    result = op(base_logits, base_probabilities, base_position, base_token)
+
+    assert result == 0
+
+
+def test_entropy_threshold_does_not_backtrack_when_equal(
+        base_logits: Tensor, base_probabilities: Tensor, base_position: int,
+        base_token: str) -> None:
+    entropy_val = -(base_probabilities * base_probabilities.log()).sum()
+    op = EntropyThreshold(max_entropy=entropy_val.item(), backtrack_count=2)
+
+    result = op(base_logits, base_probabilities, base_position, base_token)
+
+    assert result == 0
+
+
+def test_entropy_threshold_handles_zero_probability_correctly(
+        base_logits: Tensor, zero_entropy_probabilities: Tensor,
+        base_position: int, base_token: str) -> None:
+    op = EntropyThreshold(max_entropy=0.01)
+
+    result = op(base_logits, zero_entropy_probabilities, base_position,
+                base_token)
+
+    assert result == 0
+
+
+@pytest.mark.parametrize("invalid_entropy", [-0.1, -100.0])
+def test_entropy_init_raises_error_for_negative_entropy(
+        invalid_entropy: float) -> None:
+    with pytest.raises(ValueError, match="`max_entropy` must be non-negative"):
+        EntropyThreshold(max_entropy=invalid_entropy)
+
+
+@pytest.mark.parametrize("invalid_count", [0, -1, -10])
+def test_entropy_init_raises_error_for_invalid_backtrack_count(
+        invalid_count: int) -> None:
+    with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
+        EntropyThreshold(backtrack_count=invalid_count)

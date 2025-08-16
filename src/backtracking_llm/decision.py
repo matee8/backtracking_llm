@@ -55,7 +55,7 @@ class ProbabilityThreshold:
     the selected token falls below a pre-configured threshold.
 
     Attributes:
-        min_prbability: The probability threshold below which backtracking is
+        min_probability: The probability threshold below which backtracking is
             triggered.
         backtrack_count: The number of tokens to backtrack if the condition
             is met.
@@ -87,11 +87,8 @@ class ProbabilityThreshold:
 
     def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
-        """Determines if the token's probability is below the threshold.
-
-        Returns:
-            The configured `backtrack_count` if the token's probability is
-            less than `min_probability`, otherwise 0.
+        """Implements the Operator protocol by checking whether the last chosen
+        token's probability is below the pre-configured threshold.
         """
         if not 0 <= position < probabilities.shape[0]:
             logger.warning(

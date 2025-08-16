@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from backtracking_llm.decision import (EntropyThreshold, Never,
-                                       ProbabilityThreshold)
+                                       ProbabilityMargin, ProbabilityThreshold)
 
 # pylint: disable=redefined-outer-name
 
@@ -40,6 +40,12 @@ def high_entropy_probabilities() -> Tensor:
 def zero_entropy_probabilities() -> Tensor:
     """Returns a certain (zero entropy) probability distribution."""
     return torch.tensor([1.0, 0.0, 0.0, 0.0])
+
+
+@pytest.fixture
+def low_margin_probabilities() -> Tensor:
+    """Returns a distribution where the top 2 probabilities are very close."""
+    return torch.tensor([0.35, 0.32, 0.18, 0.15])
 
 
 def test_never_operator_always_returns_0(base_logits: Tensor,
@@ -161,3 +167,51 @@ def test_entropy_init_raises_error_for_invalid_backtrack_count(
         invalid_count: int) -> None:
     with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
         EntropyThreshold(backtrack_count=invalid_count)
+
+
+def test_probability_margin_triggers_backtrack_on_low_margin(
+        base_logits: Tensor, low_margin_probabilities: Tensor,
+        base_position: int, base_token: str) -> None:
+    op = ProbabilityMargin(min_margin=0.1, backtrack_count=2)
+
+    result = op(base_logits, low_margin_probabilities, base_position,
+                base_token)
+
+    assert result == 2
+
+
+def test_probability_margin_does_not_backtrack_when_equal(
+        base_logits: Tensor, low_margin_probabilities: Tensor,
+        base_position: int, base_token: str) -> None:
+    op = ProbabilityMargin(min_margin=0.03)
+
+    result = op(base_logits, low_margin_probabilities, base_position,
+                base_token)
+
+    assert result == 0
+
+
+@pytest.mark.parametrize("invalid_margin", [-0.1, 1.1, -10.0])
+def test_prob_margin_init_raises_error_for_invalid_margin(
+        invalid_margin: float) -> None:
+    with pytest.raises(ValueError, match="`min_margin` must be between"):
+        ProbabilityMargin(min_margin=invalid_margin)
+
+
+@pytest.mark.parametrize("invalid_count", [0, -1, -10])
+def test_prob_margin_init_raises_error_for_invalid_backtrack_count(
+        invalid_count: int) -> None:
+    with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
+        ProbabilityMargin(backtrack_count=invalid_count)
+
+
+def test_prob_margin_handles_vocab_size_less_than_2(caplog, base_logits: Tensor,
+                                                    base_position: int,
+                                                    base_token: str) -> None:
+    op = ProbabilityMargin()
+    small_probs = torch.tensor([1.0])
+
+    result = op(base_logits, small_probs, base_position, base_token)
+
+    assert result == 0
+    assert "fewer than 2 elements" in caplog.text

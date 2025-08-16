@@ -10,6 +10,7 @@ model's output at a given step and return an integer value.
 import logging
 from typing import Protocol
 
+import torch
 from torch import Tensor
 
 logger = logging.getLogger(__name__)
@@ -50,9 +51,6 @@ class Never:
 
 class ProbabilityThreshold:
     """An operator that backtracks if a token's probability is too low.
-
-    This decision function triggers a backtrack operation if the probability of
-    the selected token falls below a pre-configured threshold.
 
     Attributes:
         min_probability: The probability threshold below which backtracking is
@@ -107,9 +105,6 @@ class EntropyThreshold:
     """An operator that backtracks when the entropy of the probabilities is too
     high.
 
-    This decision function triggers a backtrack operation if the entropy of the
-    probabilities raises above a pre-configured threshold.
-
     Attributes:
         max_entropy: The entropy threshold above which backtracking is
             triggered.
@@ -150,6 +145,63 @@ class EntropyThreshold:
         entropy = -(non_zero_probabilities * non_zero_probabilities.log()).sum()
 
         if entropy.item() > self.max_entropy:
+            return self.backtrack_count
+
+        return 0
+
+
+class ProbabilityMargin:
+    """An operator that backtracks if the confidence margin is too small.
+
+    Attributes:
+        min_margin: The minimum required difference between the top two
+            probabilities. If the actual difference is smaller, backtracking is
+            triggered.
+        backtrack_count: The number of tokens to backtrack if the condition is
+            met.
+    """
+
+    def __init__(self,
+                 min_margin: float = 0.05,
+                 backtrack_count: int = 1) -> None:
+        """Initializes the ProbabilityMargin operator.
+
+        Args:
+            min_margin: The minimum required difference between the top two
+                probabilities. Must be a value between 0.0 and 1.0.
+            backtrack_count: The number of tokens to remove when backtracking.
+                Must be a positive integer.
+
+        Raises:
+            ValueError: If `min_margin` is not between 0.0 and 1.0, or if
+                `backtrack_count` is not positive.
+        """
+        if not 0.0 <= min_margin <= 1.0:
+            raise ValueError("`min_margin` must be between 0.0 and 1.0")
+
+        if backtrack_count < 1:
+            raise ValueError("`backtrack_count` must be positive")
+
+        self.min_margin = min_margin
+        self.backtrack_count = backtrack_count
+
+    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+                 token: str) -> int:
+        """Implements the Operator protocol by checking whether the margin
+        between the top two probabilities is below a pre-configured threshold.
+        """
+        if probabilities.shape[0] < 2:
+            logger.warning(
+                "Cannot calculate margin between top 2 probabilities for a "
+                "distribution with fewer than 2 elements, got %d.",
+                probabilities.shape[0])
+            return 0
+
+        top_probabilities, _ = torch.topk(probabilities, k=2)
+
+        difference = top_probabilities[0] - top_probabilities[1]
+
+        if difference.item() < self.min_margin:
             return self.backtrack_count
 
         return 0

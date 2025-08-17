@@ -6,7 +6,7 @@ from torch import Tensor
 
 from backtracking_llm.decision import (EntropyThreshold, Never, ProbabilityDrop,
                                        ProbabilityMargin, ProbabilityThreshold,
-                                       ProbabilityTrend)
+                                       ProbabilityTrend, Repetition)
 
 # pylint: disable=redefined-outer-name
 
@@ -374,3 +374,47 @@ def test_prob_trend_handles_out_of_bounds_position(caplog, base_logits: Tensor,
 
     assert result == 0
     assert "out of bounds" in caplog.text
+
+
+def test_repetition_triggers_backtrack_and_resets_state(
+        base_logits: Tensor, base_probabilities: Tensor,
+        base_position: int) -> None:
+    op = Repetition(max_repetitions=2)
+
+    assert op(base_logits, base_probabilities, base_position, "") == 0
+    assert op(base_logits, base_probabilities, base_position, "") == 0
+    assert op(base_logits, base_probabilities, base_position, "") == 3
+
+    assert op(base_logits, base_probabilities, base_position, "") == 0
+
+
+def test_repetition_does_not_backtrack_at_allowed_limit(
+        base_logits: Tensor, base_probabilities: Tensor,
+        base_position: int) -> None:
+    op = Repetition(max_repetitions=3)
+
+    op(base_logits, base_probabilities, base_position, "")
+    op(base_logits, base_probabilities, base_position, "")
+    result = op(base_logits, base_probabilities, base_position, "")
+
+    assert result == 0
+
+
+def test_repetition_counter_resets_on_different_token(
+        base_logits: Tensor, base_probabilities: Tensor,
+        base_position: int) -> None:
+    op = Repetition(max_repetitions=2)
+
+    op(base_logits, base_probabilities, base_position, "1")
+    op(base_logits, base_probabilities, base_position, "1")
+    result1 = op(base_logits, base_probabilities, base_position, "2")
+    assert result1 == 0
+
+    result2 = op(base_logits, base_probabilities, base_position, "2")
+    assert result2 == 0
+
+
+@pytest.mark.parametrize("invalid_n", [0, -1, -10])
+def test_repetition_init_raises_error_for_invalid_n(invalid_n: int) -> None:
+    with pytest.raises(ValueError, match="`max_repetitions` must be positive"):
+        Repetition(max_repetitions=invalid_n)

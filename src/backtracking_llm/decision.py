@@ -343,3 +343,52 @@ class ProbabilityTrend:
         self._history.append(current_probability)
 
         return self.backtrack_count if backtrack else 0
+
+
+class Repetition:
+    """An operator that backtracks on excessive consecutive token repetitions.
+
+    Attributes:
+        max_repetitions: The maximum number of consecutive repetitions allowed.
+        _last_token: Internal state to store the last token.
+        _repeat_count: Internal state to count consecutive repetitions.
+    """
+
+    def __init__(self, max_repetitions: int = 3) -> None:
+        """Initializes the Repetition operator.
+
+        Args:
+            max_repetitions: The maximum number of consecutive repetitions
+                allowed before triggering a backtrack. Must be a positive
+                integer.
+
+        Raises:
+            ValueError: If `max_repetitions` is not positive.
+        """
+        if max_repetitions < 1:
+            raise ValueError("`max_repetitions` must be positive")
+
+        self.max_repetitions = max_repetitions
+        self._last_token: Optional[str] = None
+        self._repeat_count = 0
+
+    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+                 token: str) -> int:
+        """Implements the Operator protocol by checking for and counting
+        consecutive token repetitions.
+        """
+        if token == self._last_token:
+            self._repeat_count += 1
+        else:
+            self._repeat_count = 1
+            self._last_token = token
+
+        if self._repeat_count > self.max_repetitions:
+            backtrack_amount = self._repeat_count
+
+            self._repeat_count = 0
+            self._last_token = None
+
+            return backtrack_amount
+
+        return 0

@@ -8,6 +8,7 @@ model's output at a given step and return an integer value.
 # pylint: disable=unused-argument
 
 import logging
+from collections import deque
 from typing import Optional, Protocol
 
 import torch
@@ -264,5 +265,81 @@ class ProbabilityDrop:
                 backtrack = True
 
         self._last_probability = current_probability
+
+        return self.backtrack_count if backtrack else 0
+
+
+class ProbabilityTrend:
+    """An operator that backtracks if the confidence drops below a historical
+    average.
+
+    Attributes:
+        window_size: The maximum number of recent probabilities to store.
+        drop_threshold: A ratio used to check against the historical mean.
+            A backtrack is triggered if the current probability is less than
+            `mean * relative_drop_threshold`.
+        backtrack_count: The number of tokens to backtrack if the condition is
+            met.
+        _history: A deque used as a sliding window to store recent
+            probabilities.
+    """
+
+    def __init__(self,
+                 window_size: int = 10,
+                 drop_threshold: float = 0.5,
+                 backtrack_count: int = 1) -> None:
+        """Initializes the ProbabilityTrend operator.
+
+        Args:
+            window_size: The size of the historical probability window. Must be
+                at least 2.
+            drop_threshold: The relative threshold for the drop. E.g., a value
+                of 0.5 means backtrack is triggered if the current probability
+                is less than 50% of the historical average. Must be a value
+                between 0.0 and 1.0.
+            backtrack_count: The number of tokens to remove when backtracking.
+                Must be a positive integer.
+
+        Raises:
+            ValueError: If `window_size` is less than 2, `drop_threshold` is not
+                between 0.0 and 1.0, or `backtrack_count` is not positive.
+        """
+        if window_size < 2:
+            raise ValueError("`window_size` must be at least 2")
+
+        if not 0.0 < drop_threshold < 1.0:
+            raise ValueError("`drop_threshold` must be between 0.0 and 1.0")
+
+        if backtrack_count < 1:
+            raise ValueError("`backtrack_count` must be positive")
+
+        self.window_size = window_size
+        self.drop_threshold = drop_threshold
+        self.backtrack_count = backtrack_count
+        self._history: deque[float] = deque(maxlen=self.window_size)
+
+    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+                 token: str) -> int:
+        """Implements the Operator protocol by checking if the current
+        probability has dropped below a historical trend.
+        """
+        if not 0 <= position < probabilities.shape[0]:
+            logger.warning(
+                "Chosen token position %d is out of bounds for "
+                "probability tensor of size %d.", position,
+                probabilities.shape[0])
+            return 0
+
+        current_probability = probabilities[position].item()
+        backtrack = False
+
+        if len(self._history) >= self.window_size // 2:
+            historical_mean = sum(self._history) / len(self._history)
+            threshold = historical_mean * self.drop_threshold
+
+            if current_probability < threshold:
+                backtrack = True
+
+        self._history.append(current_probability)
 
         return self.backtrack_count if backtrack else 0

@@ -5,7 +5,8 @@ import torch
 from torch import Tensor
 
 from backtracking_llm.decision import (EntropyThreshold, Never, ProbabilityDrop,
-                                       ProbabilityMargin, ProbabilityThreshold)
+                                       ProbabilityMargin, ProbabilityThreshold,
+                                       ProbabilityTrend)
 
 # pylint: disable=redefined-outer-name
 
@@ -287,6 +288,86 @@ def test_prob_drop_handles_out_of_bounds_position(caplog, base_logits: Tensor,
                                                   base_probabilities: Tensor,
                                                   base_token: str) -> None:
     op = ProbabilityDrop()
+    invalid_position = 5
+
+    result = op(base_logits, base_probabilities, invalid_position, base_token)
+
+    assert result == 0
+    assert "out of bounds" in caplog.text
+
+
+def test_probability_trend_triggers_backtrack_on_significant_drop(
+        base_logits: Tensor, base_token: str) -> None:
+    op = ProbabilityTrend(window_size=4, drop_threshold=0.5, backtrack_count=2)
+    prob_sequence = [
+        torch.tensor([0.8, 0.2]),
+        torch.tensor([0.9, 0.1]),
+        torch.tensor([0.2, 0.8]),
+    ]
+
+    op(base_logits, prob_sequence[0], 0, base_token)
+    op(base_logits, prob_sequence[1], 0, base_token)
+    result = op(base_logits, prob_sequence[2], 0, base_token)
+
+    assert result == 2
+
+
+def test_probability_trend_does_not_backtrack_on_stable_trend(
+        base_logits: Tensor, base_token: str) -> None:
+    op = ProbabilityTrend(window_size=4, drop_threshold=0.5)
+    prob_sequence = [
+        torch.tensor([0.8, 0.2]),
+        torch.tensor([0.9, 0.1]),
+        torch.tensor([0.7, 0.3]),
+    ]
+
+    op(base_logits, prob_sequence[0], 0, base_token)
+    op(base_logits, prob_sequence[1], 0, base_token)
+    result = op(base_logits, prob_sequence[2], 0, base_token)
+
+    assert result == 0
+
+
+def test_probability_trend_respects_warmup_period(base_logits: Tensor,
+                                                  base_token: str) -> None:
+    op = ProbabilityTrend(window_size=10, drop_threshold=0.5)
+    prob_sequence = [
+        torch.tensor([0.9, 0.1]),
+        torch.tensor([0.1, 0.9]),
+    ]
+
+    op(base_logits, prob_sequence[0], 0, base_token)
+
+    result = op(base_logits, prob_sequence[1], 0, base_token)
+
+    assert result == 0
+
+
+@pytest.mark.parametrize("invalid_size", [1, 0, -5])
+def test_prob_trend_init_raises_error_for_invalid_window_size(
+        invalid_size: int) -> None:
+    with pytest.raises(ValueError, match="`window_size` must be at least 2"):
+        ProbabilityTrend(window_size=invalid_size)
+
+
+@pytest.mark.parametrize("invalid_ratio", [0.0, 1.0, -0.1, 1.1])
+def test_prob_trend_init_raises_error_for_invalid_ratio(
+        invalid_ratio: float) -> None:
+    with pytest.raises(ValueError, match="`drop_threshold` must be between"):
+        ProbabilityTrend(drop_threshold=invalid_ratio)
+
+
+@pytest.mark.parametrize("invalid_count", [0, -1, -10])
+def test_prob_trend_init_raises_error_for_invalid_backtrack_count(
+        invalid_count: int) -> None:
+    with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
+        ProbabilityTrend(backtrack_count=invalid_count)
+
+
+def test_prob_trend_handles_out_of_bounds_position(caplog, base_logits: Tensor,
+                                                   base_probabilities: Tensor,
+                                                   base_token: str) -> None:
+    op = ProbabilityTrend()
     invalid_position = 5
 
     result = op(base_logits, base_probabilities, invalid_position, base_token)

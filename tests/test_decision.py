@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from backtracking_llm.decision import (EntropyThreshold, Never,
+from backtracking_llm.decision import (EntropyThreshold, Never, ProbabilityDrop,
                                        ProbabilityMargin, ProbabilityThreshold)
 
 # pylint: disable=redefined-outer-name
@@ -215,3 +215,81 @@ def test_prob_margin_handles_vocab_size_less_than_2(caplog, base_logits: Tensor,
 
     assert result == 0
     assert "fewer than 2 elements" in caplog.text
+
+
+def test_probability_drop_triggers_backtrack_on_sharp_drop(
+        base_logits: Tensor, base_token: str) -> None:
+    op = ProbabilityDrop(max_drop=0.5, backtrack_count=2)
+    high_probability_distribution = torch.tensor([0.8, 0.1, 0.05, 0.05])
+    low_probanility_distribution = torch.tensor([0.3, 0.3, 0.2, 0.2])
+
+    result1 = op(base_logits, high_probability_distribution, 0, base_token)
+    assert result1 == 0
+
+    result2 = op(base_logits, low_probanility_distribution, 0, base_token)
+    assert result2 == 2
+
+
+def test_probability_drop_does_not_backtrack_on_mild_drop(
+        base_logits: Tensor, base_token: str) -> None:
+    op = ProbabilityDrop(max_drop=0.5)
+
+    high_probability_distribution = torch.tensor([0.8, 0.1, 0.05, 0.05])
+    mild_probability_distribution = torch.tensor([0.5, 0.2, 0.2, 0.1])
+
+    op(base_logits, high_probability_distribution, 0, base_token)
+
+    result = op(base_logits, mild_probability_distribution, 0, base_token)
+    assert result == 0
+
+
+def test_probability_drop_handles_increase_in_probability(
+        base_logits: Tensor, base_token: str) -> None:
+    op = ProbabilityDrop(max_drop=0.5)
+
+    low_probability_distribution = torch.tensor([0.3, 0.3, 0.2, 0.2])
+    high_probability_distribution = torch.tensor([0.8, 0.1, 0.05, 0.05])
+
+    op(base_logits, low_probability_distribution, 0, base_token)
+
+    result = op(base_logits, high_probability_distribution, 0, base_token)
+    assert result == 0
+
+
+def test_probability_drop_handles_previous_prob_of_zero(
+        base_logits: Tensor, base_token: str) -> None:
+    op = ProbabilityDrop(max_drop=0.5)
+
+    zero_probability_distribution = torch.tensor([0.0, 0.5, 0.5, 0.0])
+    next_probability_distribution = torch.tensor([0.1, 0.5, 0.4, 0.0])
+
+    op(base_logits, zero_probability_distribution, 0, base_token)
+
+    result = op(base_logits, next_probability_distribution, 0, base_token)
+    assert result == 0
+
+
+@pytest.mark.parametrize("invalid_drop", [-0.1, 1.1, 10.0])
+def test_prob_drop_init_raises_error_for_invalid_drop(
+        invalid_drop: float) -> None:
+    with pytest.raises(ValueError, match="`max_drop` must be between"):
+        ProbabilityDrop(max_drop=invalid_drop)
+
+
+@pytest.mark.parametrize("invalid_count", [0, -1, -10])
+def test_prob_drop_init_raises_error_for_invalid_backtrack_count(
+        invalid_count: int) -> None:
+    with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
+        ProbabilityDrop(backtrack_count=invalid_count)
+
+
+def test_prob_drop_handles_out_of_bounds_position(caplog, base_logits: Tensor,
+                                                  base_probabilities: Tensor,
+                                                  base_token: str) -> None:
+    op = ProbabilityDrop()
+    invalid_position = 5
+
+    result = op(base_logits, base_probabilities, invalid_position, base_token)
+
+    assert result == 0
+    assert "out of bounds" in caplog.text

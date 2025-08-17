@@ -8,7 +8,7 @@ model's output at a given step and return an integer value.
 # pylint: disable=unused-argument
 
 import logging
-from typing import Protocol
+from typing import Optional, Protocol
 
 import torch
 from torch import Tensor
@@ -205,3 +205,64 @@ class ProbabilityMargin:
             return self.backtrack_count
 
         return 0
+
+
+class ProbabilityDrop:
+    """An operator that backtracks if the token confidence drops too sharply.
+
+    Attributes:
+        max_drop: The maximum allowed relative drop in probability.
+        backtrack_count: The number of tokens to backtrack if the condition is
+            met.
+        _last_probability: Internal state to store the last token's probability.
+    """
+
+    def __init__(self, max_drop: float = 0.8, backtrack_count: int = 1) -> None:
+        """Initializes the ProbabilityDrop operator.
+
+        Args:
+            max_drop: The maximum allowed relative drop. E.g., a value of 0.8
+                means a backtrack is triggered if the new probability is less
+                than 20% (1.0 - 0.8) of the previous probability. Must be a
+                number between 0.0 and 1.0
+            backtrack_count: The number of tokens to remove when backtracking.
+                Must be a positive number.
+
+        Raises:
+            ValueError: If `max_drop` is not between 0.0 and 1.0, or if
+                `backtrack_count` is not positive.
+        """
+        if not 0.0 <= max_drop <= 1.0:
+            raise ValueError("`max_drop` must be between 0.0 and 1.0")
+
+        if backtrack_count < 1:
+            raise ValueError("`backtrack_count` must be positive")
+
+        self.max_drop = max_drop
+        self.backtrack_count = backtrack_count
+        self._last_probability: Optional[float] = None
+
+    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+                 token: str) -> int:
+        """Implements the Operator protocol by comparing the the current token's
+        probability to the previous one.
+        """
+        if not 0 <= position < probabilities.shape[0]:
+            logger.warning(
+                "Chosen token position %d is out of bounds for "
+                "probability tensor of size %d.", position,
+                probabilities.shape[0])
+            self._last_probability = None
+            return 0
+
+        current_probability = probabilities[position].item()
+        backtrack = False
+
+        if self._last_probability is not None:
+            threshold = self._last_probability * (1.0 - self.max_drop)
+            if current_probability < threshold:
+                backtrack = True
+
+        self._last_probability = current_probability
+
+        return self.backtrack_count if backtrack else 0

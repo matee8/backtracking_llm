@@ -101,6 +101,23 @@ class ProbabilityThreshold:
 
         return 0
 
+    def __repr__(self) -> str:
+        """Returns an executable representation of the operator."""
+        return (f'ProbabilityThreshold(min_probability={self.min_probability!r}'
+                f', backtrack_count={self.backtrack_count!r})')
+
+    def __eq__(self, other: object, /) -> bool:
+        """Checks if two ProbabilityThreshold operators are equal."""
+        if not isinstance(other, ProbabilityThreshold):
+            return NotImplemented
+        return ((self.min_probability,
+                 self.backtrack_count) == (other.min_probability,
+                                           other.backtrack_count))
+
+    def __hash__(self) -> int:
+        """Computes a hash based on the operator's configuration."""
+        return hash((self.min_probability, self.backtrack_count))
+
 
 class EntropyThreshold:
     """An operator that backtracks when the entropy of the probabilities is too
@@ -149,6 +166,23 @@ class EntropyThreshold:
             return self.backtrack_count
 
         return 0
+
+    def __repr__(self) -> str:
+        """Returns an executable representation of the operator."""
+        return (f'EntropyThreshold(max_entropy={self.max_entropy!r}, '
+                f'backtrack_count={self.backtrack_count!r})')
+
+    def __eq__(self, other: object, /) -> bool:
+        """Checks if two EntropyThreshold operators are equal."""
+        if not isinstance(other, EntropyThreshold):
+            return NotImplemented
+        return ((self.max_entropy,
+                 self.backtrack_count) == (other.max_entropy,
+                                           other.backtrack_count))
+
+    def __hash__(self) -> int:
+        """Computes a hash based on the operator's configuration."""
+        return hash((self.max_entropy, self.backtrack_count))
 
 
 class ProbabilityMargin:
@@ -206,6 +240,23 @@ class ProbabilityMargin:
             return self.backtrack_count
 
         return 0
+
+    def __repr__(self) -> str:
+        """Returns an executable representation of the operator."""
+        return (f'ProbabilityMargin(min_margin={self.min_margin!r}, '
+                f'backtrack_count={self.backtrack_count!r})')
+
+    def __eq__(self, other: object, /) -> bool:
+        """Checks if two ProbabilityMargin operators are equal."""
+        if not isinstance(other, ProbabilityMargin):
+            return NotImplemented
+        return ((self.min_margin,
+                 self.backtrack_count) == (other.min_margin,
+                                           other.backtrack_count))
+
+    def __hash__(self) -> int:
+        """Computes a hash based on the operator's configuration."""
+        return hash((self.min_margin, self.backtrack_count))
 
 
 class ProbabilityDrop:
@@ -267,6 +318,23 @@ class ProbabilityDrop:
         self._last_probability = current_probability
 
         return self.backtrack_count if backtrack else 0
+
+    def __repr__(self) -> str:
+        """Returns an executable representation of the operator."""
+        return (f'ProbabilityDrop(max_drop={self.max_drop!r}, '
+                f'backtrack_count={self.backtrack_count!r})')
+
+    def __eq__(self, other: object, /) -> bool:
+        """Checks if two ProbabilityDrop operators are equal."""
+        if not isinstance(other, ProbabilityDrop):
+            return NotImplemented
+        return ((self.max_drop,
+                 self.backtrack_count) == (other.max_drop,
+                                           other.backtrack_count))
+
+    def __hash__(self) -> int:
+        """Computes a hash based on the operator's configuration."""
+        return hash((self.max_drop, self.backtrack_count))
 
 
 class ProbabilityTrend:
@@ -344,6 +412,26 @@ class ProbabilityTrend:
 
         return self.backtrack_count if backtrack else 0
 
+    def __repr__(self) -> str:
+        """Returns an executable representation of the operator."""
+        return (f'ProbabilityTrend(window_size={self.window_size!r}, '
+                f'drop_threshold={self.drop_threshold!r}, '
+                f'backtrack_count={self.backtrack_count!r})')
+
+    def __eq__(self, other: object, /) -> bool:
+        """Checks if two ProbabilityTrend operators are equal."""
+        if not isinstance(other, ProbabilityTrend):
+            return NotImplemented
+        return ((self.window_size, self.drop_threshold,
+                 self.backtrack_count) == (other.window_size,
+                                           other.drop_threshold,
+                                           other.backtrack_count))
+
+    def __hash__(self) -> int:
+        """Computes a hash based on the operator's configuration."""
+        return hash(
+            (self.window_size, self.drop_threshold, self.backtrack_count))
+
 
 class Repetition:
     """An operator that backtracks on excessive consecutive token repetitions.
@@ -392,6 +480,20 @@ class Repetition:
             return backtrack_amount
 
         return 0
+
+    def __repr__(self) -> str:
+        """Returns an executable representation of the operator."""
+        return (f'Repetition(max_repetitions={self.max_repetitions!r})')
+
+    def __eq__(self, other: object, /) -> bool:
+        """Checks if two Repetition operators are equal."""
+        if not isinstance(other, Repetition):
+            return NotImplemented
+        return (self.max_repetitions) == (other.max_repetitions)
+
+    def __hash__(self) -> int:
+        """Computes a hash based on the operator's configuration."""
+        return hash((self.max_repetitions))
 
 
 class NGramOverlap:
@@ -447,6 +549,23 @@ class NGramOverlap:
             self._seen_ngrams.add(current_ngram)
             return 0
 
+    def __repr__(self) -> str:
+        """Returns an executable representation of the operator."""
+        return (f'NGramOverlap(ngram_size={self.ngram_size!r}, '
+                f'backtrack_count={self.backtrack_count!r})')
+
+    def __eq__(self, other: object, /) -> bool:
+        """Checks if two NGramOverlap operators are equal."""
+        if not isinstance(other, NGramOverlap):
+            return NotImplemented
+        return ((self.ngram_size,
+                 self.backtrack_count) == (other.ngram_size,
+                                           other.backtrack_count))
+
+    def __hash__(self) -> int:
+        """Computes a hash based on the operator's configuration."""
+        return hash((self.ngram_size, self.backtrack_count))
+
 
 class LogitThreshold:
     """An operator that backtracks if a token's logit is too low.
@@ -491,3 +610,20 @@ class LogitThreshold:
             return self.backtrack_count
 
         return 0
+
+    def __repr__(self) -> str:
+        """Returns an executable representation of the operator."""
+        return (f'LogitThreshold(min_logit={self.min_logit!r}, '
+                f'backtrack_count={self.backtrack_count!r})')
+
+    def __eq__(self, other: object, /) -> bool:
+        """Checks if two LogitThreshold operators are equal."""
+        if not isinstance(other, LogitThreshold):
+            return NotImplemented
+        return ((self.min_logit,
+                 self.backtrack_count) == (other.min_logit,
+                                           other.backtrack_count))
+
+    def __hash__(self) -> int:
+        """Computes a hash based on the operator's configuration."""
+        return hash((self.min_logit, self.backtrack_count))

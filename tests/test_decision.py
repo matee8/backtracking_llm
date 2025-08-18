@@ -522,3 +522,105 @@ def test_logit_call_handles_out_of_bounds_position(caplog, base_logits: Tensor,
 
     assert result == 0
     assert 'out of bounds' in caplog.text
+
+
+OPERATOR_TEST_CASES = [
+    (ProbabilityThreshold, {
+        'min_probability': 0.05,
+        'backtrack_count': 1
+    }, {
+        'min_probability': 0.5,
+        'backtrack_count': 2
+    }),
+    (LogitThreshold, {
+        'min_logit': -20.0,
+        'backtrack_count': 1
+    }, {
+        'min_logit': -10.0,
+        'backtrack_count': 2
+    }),
+    (EntropyThreshold, {
+        'max_entropy': 0.2,
+        'backtrack_count': 2
+    }, {
+        'max_entropy': 1.5,
+        'backtrack_count': 1
+    }),
+    (ProbabilityMargin, {
+        'min_margin': 0.05,
+        'backtrack_count': 1
+    }, {
+        'min_margin': 0.1,
+        'backtrack_count': 2
+    }),
+    (Repetition, {
+        'max_repetitions': 3
+    }, {
+        'max_repetitions': 5
+    }),
+    (NGramOverlap, {
+        'ngram_size': 4,
+        'backtrack_count': 1
+    }, {
+        'ngram_size': 3,
+        'backtrack_count': 2
+    }),
+    (ProbabilityDrop, {
+        'max_drop': 0.8,
+        'backtrack_count': 1
+    }, {
+        'max_drop': 0.5,
+        'backtrack_count': 2
+    }),
+    (ProbabilityTrend, {
+        'window_size': 10,
+        'drop_threshold': 0.5,
+        'backtrack_count': 1
+    }, {
+        'window_size': 5,
+        'drop_threshold': 0.8,
+        'backtrack_count': 2
+    }),
+]
+
+
+@pytest.mark.parametrize('op_class, default_args, different_args',
+                         OPERATOR_TEST_CASES)
+class TestDunderMethods:
+    """A test suite for the common dunder methods of all operators."""
+
+    # pylint: disable=unused-argument
+
+    def test_repr_is_executable(self, op_class, default_args, different_args):
+        op = op_class(**default_args)
+
+        reconstructed_op = eval(repr(op))  # pylint: disable=eval-used
+
+        assert op == reconstructed_op
+
+    def test_equality(self, op_class, default_args, different_args):
+        op_a = op_class(**default_args)
+        op_b_equal = op_class(**default_args)
+        op_c_different = op_class(**different_args)
+
+        assert op_a == op_b_equal
+        assert op_a != op_c_different
+        assert op_a != 'a string'
+        assert op_a is not None
+
+    def test_hash_consistency(self, op_class, default_args, different_args):
+        op_a = op_class(**default_args)
+        op_b_equal = op_class(**default_args)
+
+        assert hash(op_a) == hash(op_b_equal)
+
+    def test_set_behavior(self, op_class, default_args, different_args):
+        op_a = op_class(**default_args)
+        op_b_equal = op_class(**default_args)
+        op_c_different = op_class(**different_args)
+
+        operator_set = {op_a, op_b_equal, op_c_different}
+
+        assert len(operator_set) == 2
+        assert op_a in operator_set
+        assert op_c_different in operator_set

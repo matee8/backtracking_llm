@@ -4,9 +4,10 @@ import pytest
 import torch
 from torch import Tensor
 
-from backtracking_llm.decision import (EntropyThreshold, Never, ProbabilityDrop,
-                                       ProbabilityMargin, ProbabilityThreshold,
-                                       ProbabilityTrend, Repetition)
+from backtracking_llm.decision import (EntropyThreshold, NGramOverlap, Never,
+                                       ProbabilityDrop, ProbabilityMargin,
+                                       ProbabilityThreshold, ProbabilityTrend,
+                                       Repetition)
 
 # pylint: disable=redefined-outer-name
 
@@ -418,3 +419,59 @@ def test_repetition_counter_resets_on_different_token(
 def test_repetition_init_raises_error_for_invalid_n(invalid_n: int) -> None:
     with pytest.raises(ValueError, match="`max_repetitions` must be positive"):
         Repetition(max_repetitions=invalid_n)
+
+
+def test_ngram_overlap_triggers_backtrack_on_repeat(base_logits: Tensor,
+                                                    base_probabilities: Tensor,
+                                                    base_position: int) -> None:
+    op = NGramOverlap(ngram_size=3, backtrack_count=2)
+    token_sequence = ["1", "2", "3", "4", "1", "2", "3"]
+
+    results = [
+        op(base_logits, base_probabilities, base_position, token)
+        for token in token_sequence
+    ]
+
+    expected_results = [0, 0, 0, 0, 0, 0, 2]
+    assert results == expected_results
+
+
+def test_ngram_overlap_does_not_backtrack_on_unique_ngrams(
+        base_logits: Tensor, base_probabilities: Tensor,
+        base_position: int) -> None:
+    op = NGramOverlap(ngram_size=3)
+    token_sequence = ["1", "2", "3", "4", "5", "6", "7"]
+
+    results = [
+        op(base_logits, base_probabilities, base_position, token)
+        for token in token_sequence
+    ]
+
+    assert all(r == 0 for r in results)
+
+
+def test_ngram_overlap_respects_warmup_period(base_logits: Tensor,
+                                              base_probabilities: Tensor,
+                                              base_position: int) -> None:
+    op = NGramOverlap(ngram_size=4)
+    token_sequence = ["10", "20", "10"]
+
+    results = [
+        op(base_logits, base_probabilities, base_position, token)
+        for token in token_sequence
+    ]
+
+    assert results == [0, 0, 0]
+
+
+@pytest.mark.parametrize("invalid_n", [1, 0, -1])
+def test_ngram_init_raises_error_for_invalid_n(invalid_n: int) -> None:
+    with pytest.raises(ValueError, match="`ngram_size` must be greater than 1"):
+        NGramOverlap(ngram_size=invalid_n)
+
+
+@pytest.mark.parametrize("invalid_count", [0, -1, -10])
+def test_ngram_init_raises_error_for_invalid_backtrack_count(
+        invalid_count: int) -> None:
+    with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
+        NGramOverlap(backtrack_count=invalid_count)

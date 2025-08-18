@@ -392,3 +392,57 @@ class Repetition:
             return backtrack_amount
 
         return 0
+
+
+class NGramOverlap:
+    """An operator that bactracks when a sequence of tokens is repeated.
+
+    Attributes:
+        ngram_size: The size of the token sequences to track.
+        backtrack_count: THe number of tokens to remove upon detecting a repeat.
+        _window: A sliding window of the `n` most recent tokens.
+        _seen_ngrams: A set containing all unique n-grams encountered so far.
+    """
+
+    def __init__(self, ngram_size: int = 4, backtrack_count: int = 1) -> None:
+        """Initializes the NGramOverlap operator.
+
+        Args:
+            ngram_size: The size of the n-gram to check for repetitions. Must be
+                an integer greater than 1.
+            backtrack_count: The number of tokens to remove when a repetition is
+                found. Must be a positive integer.
+
+        Raises:
+            ValueError: If `ngram_size` is not greater than 1 or if
+                `backtrack_count` is not positive.
+        """
+        if ngram_size < 2:
+            raise ValueError("`ngram_size` must be greater than 1")
+
+        if backtrack_count < 1:
+            raise ValueError("`backtrack_count` must be positive")
+
+        self.ngram_size = ngram_size
+        self.backtrack_count = backtrack_count
+        self._window: deque[str] = deque(maxlen=self.ngram_size)
+        self._seen_ngrams: set[tuple[str, ...]] = set()
+
+    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+                 token: str) -> int:
+        """Implements the Operator protocol by checking if the latest n-gram has
+        been seen before.
+        """
+
+        self._window.append(token)
+
+        if len(self._window) < self.ngram_size:
+            return 0
+
+        current_ngram = tuple(self._window)
+
+        if current_ngram in self._seen_ngrams:
+            return self.backtrack_count
+        else:
+            self._seen_ngrams.add(current_ngram)
+            return 0

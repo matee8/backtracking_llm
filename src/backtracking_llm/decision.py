@@ -76,10 +76,10 @@ class ProbabilityThreshold:
                 `backtrack_count` is not positive.
         """
         if not 0.0 < min_probability < 1.0:
-            raise ValueError("`min_probability` must be between 0.0 and 1.0")
+            raise ValueError('`min_probability` must be between 0.0 and 1.0')
 
         if backtrack_count < 1:
-            raise ValueError("`backtrack_count` must be positive")
+            raise ValueError('`backtrack_count` must be positive')
 
         self.min_probability = min_probability
         self.backtrack_count = backtrack_count
@@ -91,8 +91,8 @@ class ProbabilityThreshold:
         """
         if not 0 <= position < probabilities.shape[0]:
             logger.warning(
-                "Chosen token position %d is out of bounds for "
-                "probability tensor of size %d.", position,
+                'Chosen token position %d is out of bounds for '
+                'probability tensor of size %d.', position,
                 probabilities.shape[0])
             return 0
 
@@ -128,10 +128,10 @@ class EntropyThreshold:
                 not positive.
         """
         if max_entropy < 0.0:
-            raise ValueError("`max_entropy` must be non-negative")
+            raise ValueError('`max_entropy` must be non-negative')
 
         if backtrack_count < 1:
-            raise ValueError("`backtrack_count` must be positive")
+            raise ValueError('`backtrack_count` must be positive')
 
         self.max_entropy = max_entropy
         self.backtrack_count = backtrack_count
@@ -178,10 +178,10 @@ class ProbabilityMargin:
                 `backtrack_count` is not positive.
         """
         if not 0.0 <= min_margin <= 1.0:
-            raise ValueError("`min_margin` must be between 0.0 and 1.0")
+            raise ValueError('`min_margin` must be between 0.0 and 1.0')
 
         if backtrack_count < 1:
-            raise ValueError("`backtrack_count` must be positive")
+            raise ValueError('`backtrack_count` must be positive')
 
         self.min_margin = min_margin
         self.backtrack_count = backtrack_count
@@ -193,8 +193,8 @@ class ProbabilityMargin:
         """
         if probabilities.shape[0] < 2:
             logger.warning(
-                "Cannot calculate margin between top 2 probabilities for a "
-                "distribution with fewer than 2 elements, got %d.",
+                'Cannot calculate margin between top 2 probabilities for a '
+                'distribution with fewer than 2 elements, got %d.',
                 probabilities.shape[0])
             return 0
 
@@ -234,10 +234,10 @@ class ProbabilityDrop:
                 `backtrack_count` is not positive.
         """
         if not 0.0 <= max_drop <= 1.0:
-            raise ValueError("`max_drop` must be between 0.0 and 1.0")
+            raise ValueError('`max_drop` must be between 0.0 and 1.0')
 
         if backtrack_count < 1:
-            raise ValueError("`backtrack_count` must be positive")
+            raise ValueError('`backtrack_count` must be positive')
 
         self.max_drop = max_drop
         self.backtrack_count = backtrack_count
@@ -250,8 +250,8 @@ class ProbabilityDrop:
         """
         if not 0 <= position < probabilities.shape[0]:
             logger.warning(
-                "Chosen token position %d is out of bounds for "
-                "probability tensor of size %d.", position,
+                'Chosen token position %d is out of bounds for '
+                'probability tensor of size %d.', position,
                 probabilities.shape[0])
             self._last_probability = None
             return 0
@@ -305,13 +305,13 @@ class ProbabilityTrend:
                 between 0.0 and 1.0, or `backtrack_count` is not positive.
         """
         if window_size < 2:
-            raise ValueError("`window_size` must be at least 2")
+            raise ValueError('`window_size` must be at least 2')
 
         if not 0.0 < drop_threshold < 1.0:
-            raise ValueError("`drop_threshold` must be between 0.0 and 1.0")
+            raise ValueError('`drop_threshold` must be between 0.0 and 1.0')
 
         if backtrack_count < 1:
-            raise ValueError("`backtrack_count` must be positive")
+            raise ValueError('`backtrack_count` must be positive')
 
         self.window_size = window_size
         self.drop_threshold = drop_threshold
@@ -325,8 +325,8 @@ class ProbabilityTrend:
         """
         if not 0 <= position < probabilities.shape[0]:
             logger.warning(
-                "Chosen token position %d is out of bounds for "
-                "probability tensor of size %d.", position,
+                'Chosen token position %d is out of bounds for '
+                'probability tensor of size %d.', position,
                 probabilities.shape[0])
             return 0
 
@@ -366,7 +366,7 @@ class Repetition:
             ValueError: If `max_repetitions` is not positive.
         """
         if max_repetitions < 1:
-            raise ValueError("`max_repetitions` must be positive")
+            raise ValueError('`max_repetitions` must be positive')
 
         self.max_repetitions = max_repetitions
         self._last_token: Optional[str] = None
@@ -418,10 +418,10 @@ class NGramOverlap:
                 `backtrack_count` is not positive.
         """
         if ngram_size < 2:
-            raise ValueError("`ngram_size` must be greater than 1")
+            raise ValueError('`ngram_size` must be greater than 1')
 
         if backtrack_count < 1:
-            raise ValueError("`backtrack_count` must be positive")
+            raise ValueError('`backtrack_count` must be positive')
 
         self.ngram_size = ngram_size
         self.backtrack_count = backtrack_count
@@ -471,7 +471,7 @@ class LogitThreshold:
             ValueError: If `backtrack_count` is not positive.
         """
         if backtrack_count < 1:
-            raise ValueError("`backtrack_count` must be positive")
+            raise ValueError('`backtrack_count` must be positive')
 
         self.min_logit = min_logit
         self.backtrack_count = backtrack_count
@@ -483,8 +483,8 @@ class LogitThreshold:
         """
         if not 0 <= position < logits.shape[0]:
             logger.warning(
-                "Chosen token position %d is out of bounds for "
-                "logits tensor of size %d.", position, logits.shape[0])
+                'Chosen token position %d is out of bounds for '
+                'logits tensor of size %d.', position, logits.shape[0])
             return 0
 
         if logits[position].item() < self.min_logit:

@@ -44,7 +44,7 @@ class Never:
     Used for testing purposes.
     """
 
-    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Always returns 0, indicating no backtracking should occur."""
         return 0
@@ -84,7 +84,7 @@ class ProbabilityThreshold:
         self.min_probability = min_probability
         self.backtrack_count = backtrack_count
 
-    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Implements the Operator protocol by checking whether the last chosen
         token's probability is below the pre-configured threshold.
@@ -136,7 +136,7 @@ class EntropyThreshold:
         self.max_entropy = max_entropy
         self.backtrack_count = backtrack_count
 
-    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Implements the Operator protocol by checking whether the probability
         distribution's entropy is above a pre-configured threshold.
@@ -186,7 +186,7 @@ class ProbabilityMargin:
         self.min_margin = min_margin
         self.backtrack_count = backtrack_count
 
-    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Implements the Operator protocol by checking whether the margin
         between the top two probabilities is below a pre-configured threshold.
@@ -243,7 +243,7 @@ class ProbabilityDrop:
         self.backtrack_count = backtrack_count
         self._last_probability: Optional[float] = None
 
-    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Implements the Operator protocol by comparing the the current token's
         probability to the previous one.
@@ -318,7 +318,7 @@ class ProbabilityTrend:
         self.backtrack_count = backtrack_count
         self._history: deque[float] = deque(maxlen=self.window_size)
 
-    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Implements the Operator protocol by checking if the current
         probability has dropped below a historical trend.
@@ -372,7 +372,7 @@ class Repetition:
         self._last_token: Optional[str] = None
         self._repeat_count = 0
 
-    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Implements the Operator protocol by checking for and counting
         consecutive token repetitions.
@@ -428,7 +428,7 @@ class NGramOverlap:
         self._window: deque[str] = deque(maxlen=self.ngram_size)
         self._seen_ngrams: set[tuple[str, ...]] = set()
 
-    def __call__(self, tokens: Tensor, probabilities: Tensor, position: int,
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Implements the Operator protocol by checking if the latest n-gram has
         been seen before.
@@ -446,3 +446,48 @@ class NGramOverlap:
         else:
             self._seen_ngrams.add(current_ngram)
             return 0
+
+
+class LogitThreshold:
+    """An operator that backtracks if a token's logit is too low.
+
+    Attributes:
+        min_logit: The logit threshold below which backtracking is triggered.
+        backtrack_count: The number of tokens to backtrack if the condition
+            is met.
+    """
+
+    def __init__(self,
+                 min_logit: float = -20.0,
+                 backtrack_count: int = 1) -> None:
+        """Initializes the LogitThreshold operator.
+
+        Args:
+            min_logit: The logit threshold.
+            backtrack_count: The number of tokens to remove when backtracking.
+                Must be a positive integer.
+
+        Raises:
+            ValueError: If `backtrack_count` is not positive.
+        """
+        if backtrack_count < 1:
+            raise ValueError("`backtrack_count` must be positive")
+
+        self.min_logit = min_logit
+        self.backtrack_count = backtrack_count
+
+    def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
+                 token: str) -> int:
+        """Implements the Operator protocol by checking whether the last chosen
+        token's logit is below the pre-configured threshold.
+        """
+        if not 0 <= position < logits.shape[0]:
+            logger.warning(
+                "Chosen token position %d is out of bounds for "
+                "logits tensor of size %d.", position, logits.shape[0])
+            return 0
+
+        if logits[position].item() < self.min_logit:
+            return self.backtrack_count
+
+        return 0

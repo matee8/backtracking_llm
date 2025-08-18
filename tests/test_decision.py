@@ -4,10 +4,10 @@ import pytest
 import torch
 from torch import Tensor
 
-from backtracking_llm.decision import (EntropyThreshold, NGramOverlap, Never,
-                                       ProbabilityDrop, ProbabilityMargin,
-                                       ProbabilityThreshold, ProbabilityTrend,
-                                       Repetition)
+from backtracking_llm.decision import (EntropyThreshold, LogitThreshold,
+                                       NGramOverlap, Never, ProbabilityDrop,
+                                       ProbabilityMargin, ProbabilityThreshold,
+                                       ProbabilityTrend, Repetition)
 
 # pylint: disable=redefined-outer-name
 
@@ -91,18 +91,19 @@ def test_probability_threshold_does_not_backtrack_when_equal(
 
 
 @pytest.mark.parametrize("invalid_prob", [0.0, 1.0, -0.1, 1.1])
-def test_init_raises_error_for_invalid_probability(invalid_prob) -> None:
+def test_prob_init_raises_error_for_invalid_probability(invalid_prob) -> None:
     with pytest.raises(ValueError, match="`min_probability` must be between"):
         ProbabilityThreshold(min_probability=invalid_prob)
 
 
 @pytest.mark.parametrize("invalid_count", [0, -1, -10])
-def test_init_raises_error_for_invalid_backtrack_count(invalid_count) -> None:
+def test_prob_init_raises_error_for_invalid_backtrack_count(
+        invalid_count) -> None:
     with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
         ProbabilityThreshold(backtrack_count=invalid_count)
 
 
-def test_call_handles_out_of_bounds_position(caplog, base_logits: Tensor,
+def test_prob_handles_out_of_bounds_position(caplog, base_logits: Tensor,
                                              base_probabilities: Tensor,
                                              base_token: str) -> None:
     op = ProbabilityThreshold()
@@ -475,3 +476,52 @@ def test_ngram_init_raises_error_for_invalid_backtrack_count(
         invalid_count: int) -> None:
     with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
         NGramOverlap(backtrack_count=invalid_count)
+
+
+def test_logit_threshold_triggers_backtrack_when_below(
+        base_logits: Tensor, base_probabilities: Tensor, base_position: int,
+        base_token: str) -> None:
+    op = LogitThreshold(min_logit=-1.0, backtrack_count=2)
+
+    result = op(base_logits, base_probabilities, base_position, base_token)
+
+    assert result == 2
+
+
+def test_logit_threshold_does_not_backtrack_when_above(
+        base_logits: Tensor, base_probabilities: Tensor, base_position: int,
+        base_token: str) -> None:
+    op = LogitThreshold(min_logit=-5, backtrack_count=2)
+
+    result = op(base_logits, base_probabilities, base_position, base_token)
+
+    assert result == 0
+
+
+def test_logit_threshold_does_not_backtrack_when_equal(
+        base_logits: Tensor, base_probabilities: Tensor, base_position: int,
+        base_token: str) -> None:
+    op = LogitThreshold(min_logit=-2, backtrack_count=2)
+
+    result = op(base_logits, base_probabilities, base_position, base_token)
+
+    assert result == 0
+
+
+@pytest.mark.parametrize("invalid_count", [0, -1, -10])
+def test_logit_init_raises_error_for_invalid_backtrack_count(
+        invalid_count) -> None:
+    with pytest.raises(ValueError, match="`backtrack_count` must be positive"):
+        LogitThreshold(backtrack_count=invalid_count)
+
+
+def test_logit_call_handles_out_of_bounds_position(caplog, base_logits: Tensor,
+                                                   base_probabilities: Tensor,
+                                                   base_token: str) -> None:
+    op = LogitThreshold()
+    invalid_position = 5
+
+    result = op(base_logits, base_probabilities, invalid_position, base_token)
+
+    assert result == 0
+    assert "out of bounds" in caplog.text

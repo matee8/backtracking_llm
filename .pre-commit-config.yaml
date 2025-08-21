@@ -16,7 +16,7 @@ repos:
         require_serial: true
         args:
           [
-            "--rcfile=pylintrc"
+            "--rcfile=.pylintrc"
           ]
 
       - id: pytest

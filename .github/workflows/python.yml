@@ -1,0 +1,23 @@
+name: Linting, formatting and testing
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+    - name: Install development environment
+      run: uv pip install --system --group dev .
+    - name: Run pylint
+      run: pylint src tests
+    - name: Run pytest
+      run: pytest
+    - name: Run yapf
+      run: yapf src tests
+

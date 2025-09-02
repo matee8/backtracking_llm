@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import torch
-from torch.nn import functional as F
 from transformers import DynamicCache, PreTrainedTokenizer, PreTrainedModel
 
 from backtracking_llm.generation import Generator
@@ -44,29 +43,6 @@ def test_generator_init(mock_model, mock_tokenizer):
     generator = Generator(mock_model, mock_tokenizer)
     assert generator.model is mock_model
     assert generator.tokenizer is mock_tokenizer
-
-
-def test_calculate_top_k_distribution_no_temp():
-    generator = Generator(Mock(), Mock())
-    logits = torch.tensor([[1.0, 2.0, 10.0, 5.0, 9.0]])
-    _, probs, indices = generator._calculate_top_k_distribution(logits,
-                                                                temperature=0.0,
-                                                                top_k=3)
-
-    assert torch.equal(indices, torch.tensor([[2, 4, 3]]))
-    assert torch.allclose(probs,
-                          F.softmax(torch.tensor([10.0, 9.0, 5.0]), dim=-1))
-
-
-def test_calculate_top_k_distribution_with_temp():
-    generator = Generator(Mock(), Mock())
-    logits = torch.tensor([[1.0, 2.0, 10.0, 5.0, 9.0]])
-    _, probs, _ = generator._calculate_top_k_distribution(logits,
-                                                          temperature=2.0,
-                                                          top_k=3)
-    scaled_logits = torch.tensor([[10.0, 9.0, 5.0]]) / 2.0
-    expected_probs = F.softmax(scaled_logits, dim=-1)
-    assert torch.allclose(probs, expected_probs)
 
 
 def test_apply_backtracking_ids_only():

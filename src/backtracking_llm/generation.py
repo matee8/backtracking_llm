@@ -92,9 +92,12 @@ class Generator:
                 next_token_logits = outputs.logits[:, -1, :]
                 past_key_values = outputs.past_key_values
 
-                top_k_logits, top_k_probs, top_k_indices = (
-                    self._calculate_top_k_distribution(next_token_logits,
-                                                       temperature, top_k))
+                if temperature > 0:
+                    next_token_logits = next_token_logits / temperature
+
+                top_k_logits, top_k_indices = torch.topk(
+                    next_token_logits, top_k)
+                top_k_probs = F.softmax(top_k_logits, dim=-1)
 
                 chosen_index = torch.multinomial(top_k_probs, num_samples=1)
                 next_token_id = top_k_indices[0, chosen_index].item()
@@ -161,32 +164,6 @@ class Generator:
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
         return cls(model, tokenizer)
-
-    def _calculate_top_k_distribution(
-            self, logits: Tensor, temperature: float,
-            top_k: int) -> Tuple[Tensor, Tensor, Tensor]:
-        """Filters the logits using temperature and top-k, returning a new
-        distribution.
-
-        Args:
-            logits: The raw, full-vocabulary logits from the model.
-            temperature: The value for modulating token probabilities.
-            top_k: The number of highest probability tokens to keep.
-
-        Returns:
-            A tuple containing:
-            - top_k_logits: A tensor of logits for only the top-k candidates.
-            - top_k_probs: The softmax probabilities of the top-k logits.
-            - top_k_indices: The original vocabulary indices of the top-k
-              candidates.
-        """
-        if temperature > 0:
-            logits = logits / temperature
-
-        top_k_logits, top_k_indices = torch.topk(logits, top_k)
-        top_k_probs = F.softmax(top_k_logits, dim=-1)
-
-        return top_k_logits, top_k_probs, top_k_indices
 
     def _apply_backtracking(
             self, input_ids: Tensor, past_key_values: Optional[DynamicCache],

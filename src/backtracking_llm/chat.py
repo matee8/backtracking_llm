@@ -29,9 +29,8 @@ class ChatPipeline:
         """
         self.generator = generator
 
-    def run_turn(
-            self, question: str,
-            history: ConversationHistory) -> Tuple[str, ConversationHistory]:
+    def run_turn(self, question: str, history: ConversationHistory,
+                 **generation_kwargs) -> Tuple[str, ConversationHistory]:
         """Runs a single turn of conversation.
 
         This method is stateless. It takes the current history, adds the new
@@ -44,6 +43,8 @@ class ChatPipeline:
             history: A list of dictionaries representing the conversation so
                 far, following the Hugging Face format (e.g.,
                 `[{'role': 'user', ...}]`).
+            **generation_kwargs: Additional keyword arguments to be passed
+                directly to the `generator.generate()` method.
 
         Returns:
             A tuple containing:
@@ -65,7 +66,7 @@ class ChatPipeline:
             current_turn_history, add_generation_prompt=True, tokenize=False)
         prompt = typing.cast(str, prompt)
 
-        full_output = self.generator.generate(prompt)
+        full_output = self.generator.generate(prompt, **generation_kwargs)
 
         answer = full_output.replace(prompt, '').strip()
 

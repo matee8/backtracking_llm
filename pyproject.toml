@@ -59,3 +59,6 @@ dev = [
     "yapf>=0.43.0",
     "pytest-cov>=6.0.0, <7.0.0",
 ]
+
+[project.scripts]
+backtracking-llm = "backtracking_llm.scripts.cli:main"

@@ -125,8 +125,6 @@ class Generator:
                 model_inputs = input_ids[:, -1:]
 
                 generated_token_count += 1
-                print(f"{generated_token_count=!r}")
-                print(f"{input_ids=!r}")
 
         return self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
 
@@ -142,6 +140,8 @@ class Generator:
         except AttributeError:
             tokenizer_name = self.tokenizer.__class__.__name__
         return f"<Generator model='{model_name}', tokenizer='{tokenizer_name}'>"
+
+    __call__ = generate
 
     @classmethod
     def from_pretrained(cls, model_name_or_path: str, **model_kwargs):

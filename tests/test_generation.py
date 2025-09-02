@@ -235,3 +235,9 @@ def test_from_pretrained_passes_model_kwargs(mock_model_from_pretrained,
     mock_model_from_pretrained.assert_called_once_with(model_name,
                                                        **model_kwargs)
     mock_tokenizer_from_pretrained.assert_called_once_with(model_name)
+
+
+def test_call_is_alias_for_generate(mock_model, mock_tokenizer):
+    generator = Generator(mock_model, mock_tokenizer)
+
+    assert generator.__call__ == generator.generate

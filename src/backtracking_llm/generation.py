@@ -130,6 +130,19 @@ class Generator:
 
         return self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
 
+    def __repr__(self) -> str:
+        """Returns a developer-friendly representation of the Generator."""
+        try:
+            model_name = self.model.config._name_or_path
+        except AttributeError:
+            model_name = self.model.__class__.__name__
+
+        try:
+            tokenizer_name = self.tokenizer.name_or_path
+        except AttributeError:
+            tokenizer_name = self.tokenizer.__class__.__name__
+        return f"<Generator model='{model_name}', tokenizer='{tokenizer_name}'>"
+
     def _calculate_top_k_distribution(
             self, logits: Tensor, temperature: float,
             top_k: int) -> Tuple[Tensor, Tensor, Tensor]:

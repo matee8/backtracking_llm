@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, Mock
 import pytest
 import torch
 from torch.nn import functional as F
-from transformers import DynamicCache
+from transformers import DynamicCache, PreTrainedTokenizer, PreTrainedModel
 
 from backtracking_llm.generation import Generator
 from backtracking_llm.decision import Operator
@@ -173,3 +173,30 @@ def test_generate_discards_token_on_clipped_backtrack(mock_model,
 
     final_call_args = mock_tokenizer.decode.call_args[0][0]
     assert final_call_args.shape[0] == 4
+
+
+def test_generator_repr_with_name_attributes(mock_model, mock_tokenizer):
+    mock_model.config._name_or_path = 'test-model'
+    mock_tokenizer.name_or_path = 'test-tokenizer'
+
+    generator = Generator(mock_model, mock_tokenizer)
+    expected_repr = "<Generator model='test-model', tokenizer='test-tokenizer'>"
+
+    assert repr(generator) == expected_repr
+
+
+def test_generator_repr_fallback_on_missing_attributes():
+    mock_model = MagicMock(spec=PreTrainedModel)
+    del mock_model.config
+
+    mock_tokenizer = MagicMock(spec=PreTrainedTokenizer)
+    del mock_tokenizer.name_or_path
+
+    generator = Generator(mock_model, mock_tokenizer)
+
+    model_class_name = mock_model.__class__.__name__
+    tokenizer_class_name = mock_tokenizer.__class__.__name__
+    expected_repr = (f"<Generator model='{model_class_name}', "
+                     f"tokenizer='{tokenizer_class_name}'>")
+
+    assert repr(generator) == expected_repr

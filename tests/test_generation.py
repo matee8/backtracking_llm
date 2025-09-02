@@ -126,6 +126,9 @@ def test_generate_stops_at_eos_token(mock_model, mock_tokenizer):
 
 
 def test_generate_uses_kv_cache(mock_model, mock_tokenizer):
+    mock_model.return_value.logits = torch.full((1, 1, 10), -10.0)
+    mock_model.return_value.logits[0, 0, 5] = 10.0
+
     generator = Generator(mock_model, mock_tokenizer)
     generator.generate('prompt', max_new_tokens=3, top_k=3)
     first_call_input_ids = mock_model.call_args_list[0].kwargs['input_ids']
@@ -242,6 +245,7 @@ def test_call_is_alias_for_generate(mock_model, mock_tokenizer):
     generator = Generator(mock_model, mock_tokenizer)
 
     assert generator.__call__ == generator.generate
+
 
 @patch('backtracking_llm.generation.torch.topk')
 def test_generate_caps_top_k_at_vocab_size(mock_topk, mock_model,

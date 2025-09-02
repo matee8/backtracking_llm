@@ -21,6 +21,7 @@ def mock_model():
     model.device = 'cpu'
     model.return_value.logits = torch.randn(1, 1, 10)
     model.return_value.past_key_values = MagicMock(spec=DynamicCache)
+    model.config.vocab_size = 32000
     return model
 
 
@@ -241,3 +242,22 @@ def test_call_is_alias_for_generate(mock_model, mock_tokenizer):
     generator = Generator(mock_model, mock_tokenizer)
 
     assert generator.__call__ == generator.generate
+
+@patch('backtracking_llm.generation.torch.topk')
+def test_generate_caps_top_k_at_vocab_size(mock_topk, mock_model,
+                                           mock_tokenizer):
+    vocab_size = 30
+    mock_model.config.vocab_size = vocab_size
+
+    requested_top_k = 100
+
+    mock_topk.return_value = (torch.tensor([[1.0]]), torch.tensor([[5]]))
+    mock_model.return_value.logits = torch.randn(1, 1, vocab_size)
+
+    generator = Generator(mock_model, mock_tokenizer)
+
+    generator.generate('prompt', max_new_tokens=1, top_k=requested_top_k)
+
+    called_k = mock_topk.call_args[0][1]
+    assert called_k == vocab_size
+    assert called_k != requested_top_k

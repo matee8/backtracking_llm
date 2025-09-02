@@ -69,6 +69,9 @@ class Generator:
         if backtrack_every_n < 1:
             raise ValueError('`backtrack_every_n` must be a positive integer')
 
+        vocab_size = self.model.config.vocab_size
+        top_k = min(top_k, vocab_size)
+
         device = self.model.device
         inputs = self.tokenizer(prompt, return_tensors='pt').to(device)
         input_ids: Tensor = inputs.input_ids

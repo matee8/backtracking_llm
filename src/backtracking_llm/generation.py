@@ -5,8 +5,8 @@ from typing import Optional, Tuple
 import torch
 from torch import Tensor
 from torch.nn import functional as F
-from transformers import PreTrainedModel, PreTrainedTokenizer, DynamicCache
-
+from transformers import (AutoModelForCausalLM, AutoTokenizer, DynamicCache,
+                          PreTrainedModel, PreTrainedTokenizer)
 from backtracking_llm.decision import Operator
 
 
@@ -142,6 +142,22 @@ class Generator:
         except AttributeError:
             tokenizer_name = self.tokenizer.__class__.__name__
         return f"<Generator model='{model_name}', tokenizer='{tokenizer_name}'>"
+
+    @classmethod
+    def from_pretrained(cls, model_name_or_path: str, **model_kwargs):
+        """Instantiates a Generator from a pretrained model and tokenizer.
+
+        Args:
+            model_name_or_path: The name or path of the model on the Hugging
+                Face hub.
+            **model_kwargs: Additional keyword arguments to pass to the model's
+                `from_pretrained` method.
+        """
+        model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
+                                                     **model_kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+
+        return cls(model, tokenizer)
 
     def _calculate_top_k_distribution(
             self, logits: Tensor, temperature: float,

@@ -1,6 +1,6 @@
 # pylint: disable=missing-module-docstring
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import torch
@@ -200,3 +200,38 @@ def test_generator_repr_fallback_on_missing_attributes():
                      f"tokenizer='{tokenizer_class_name}'>")
 
     assert repr(generator) == expected_repr
+
+
+@patch('backtracking_llm.generation.AutoTokenizer.from_pretrained')
+@patch('backtracking_llm.generation.AutoModelForCausalLM.from_pretrained')
+def test_from_pretrained_calls_dependencies_correctly(
+        mock_model_from_pretrained, mock_tokenizer_from_pretrained):
+    mock_model = Mock()
+    mock_tokenizer = Mock()
+    mock_model_from_pretrained.return_value = mock_model
+    mock_tokenizer_from_pretrained.return_value = mock_tokenizer
+
+    model_name = 'gpt2'
+
+    generator = Generator.from_pretrained(model_name)
+
+    mock_model_from_pretrained.assert_called_once_with(model_name)
+    mock_tokenizer_from_pretrained.assert_called_once_with(model_name)
+
+    assert isinstance(generator, Generator)
+    assert generator.model is mock_model
+    assert generator.tokenizer is mock_tokenizer
+
+
+@patch('backtracking_llm.generation.AutoTokenizer.from_pretrained')
+@patch('backtracking_llm.generation.AutoModelForCausalLM.from_pretrained')
+def test_from_pretrained_passes_model_kwargs(mock_model_from_pretrained,
+                                             mock_tokenizer_from_pretrained):
+    model_name = 'gpt2'
+    model_kwargs = {'device_map': 'auto', 'torch_dtype': torch.bfloat16}
+
+    Generator.from_pretrained(model_name, **model_kwargs)
+
+    mock_model_from_pretrained.assert_called_once_with(model_name,
+                                                       **model_kwargs)
+    mock_tokenizer_from_pretrained.assert_called_once_with(model_name)

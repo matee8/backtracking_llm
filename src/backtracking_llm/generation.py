@@ -1,5 +1,6 @@
 """Defines the core generation logic with backtracking capabilities."""
 
+import logging
 from typing import Optional, Tuple
 
 import torch
@@ -8,6 +9,8 @@ from torch.nn import functional as F
 from transformers import (AutoModelForCausalLM, AutoTokenizer, DynamicCache,
                           PreTrainedModel, PreTrainedTokenizer)
 from backtracking_llm.decision import Operator
+
+logger = logging.getLogger(__name__)
 
 
 class Generator:
@@ -81,11 +84,14 @@ class Generator:
         past_key_values: Optional[DynamicCache] = None
         generated_token_count = 0
 
+        logger.info("Starting text generation from prompt: '%s...'.",
+                    prompt[:50])
         context_manager = (torch.inference_mode() if hasattr(
             torch, 'inference_mode') else torch.no_grad())
 
         with context_manager:
             while generated_token_count < max_new_tokens:
+                logger.debug('Generation step %d.', generated_token_count + 1)
                 outputs = self.model(input_ids=model_inputs,
                                      past_key_values=past_key_values,
                                      use_cache=True)
@@ -101,8 +107,10 @@ class Generator:
 
                 chosen_index = torch.multinomial(top_k_probs, num_samples=1)
                 next_token_id = top_k_indices[0, chosen_index].item()
+                logger.debug('Sampled token ID: %d', next_token_id)
 
                 if next_token_id == self.tokenizer.eos_token_id:
+                    logger.info('EOS token detected. Stopping generation.')
                     break
 
                 backtrack_count = 0
@@ -115,6 +123,8 @@ class Generator:
                                                token_str)
 
                 if backtrack_count > 0:
+                    logger.info('Operator requested backtrack of %d tokens.',
+                                backtrack_count)
                     max_backtrack = input_ids.shape[1] - prompt_length
                     backtrack_count = min(backtrack_count, max_backtrack)
 
@@ -122,6 +132,9 @@ class Generator:
                         input_ids, past_key_values = self._apply_backtracking(
                             input_ids, past_key_values, backtrack_count)
                         generated_token_count -= backtrack_count
+                    else:
+                        logger.debug('Backtrack clipped to 0. Discarding token '
+                                     'and continuing.')
                     continue
 
                 input_ids = torch.cat(
@@ -132,6 +145,8 @@ class Generator:
 
                 generated_token_count += 1
 
+        logger.info('Generation finished. Total tokens generated: %d.',
+                    generated_token_count)
         return self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
 
     def __repr__(self) -> str:

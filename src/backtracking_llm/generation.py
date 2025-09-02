@@ -158,7 +158,9 @@ class Generator:
 
         logger.info('Generation finished. Total tokens generated: %d.',
                     generated_token_count)
-        return self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
+        newly_generated_ids = input_ids[0, prompt_length:]
+        return self.tokenizer.decode(newly_generated_ids,
+                                     skip_special_tokens=True)
 
     def __repr__(self) -> str:
         """Returns a developer-friendly representation of the Generator."""

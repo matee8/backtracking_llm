@@ -66,9 +66,7 @@ class ChatPipeline:
             current_turn_history, add_generation_prompt=True, tokenize=False)
         prompt = typing.cast(str, prompt)
 
-        full_output = self.generator.generate(prompt, **generation_kwargs)
-
-        answer = full_output.replace(prompt, '').strip()
+        answer = self.generator.generate(prompt, **generation_kwargs)
 
         new_history = history + [{
             'role': 'user',

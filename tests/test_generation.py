@@ -80,7 +80,7 @@ def test_generate_stops_at_max_new_tokens(mock_model, mock_tokenizer):
 
     final_call_args = mock_tokenizer.decode.call_args[0][0]
     print(final_call_args.shape)
-    assert final_call_args.shape[0] == 8
+    assert final_call_args.shape[0] == 5
 
 
 def test_generate_stops_at_eos_token(mock_model, mock_tokenizer):
@@ -98,7 +98,7 @@ def test_generate_stops_at_eos_token(mock_model, mock_tokenizer):
     generator.generate('prompt', max_new_tokens=10, top_k=10)
 
     final_call_args = mock_tokenizer.decode.call_args[0][0]
-    assert final_call_args.shape[0] == 4
+    assert final_call_args.shape[0] == 1
 
 
 def test_generate_uses_kv_cache(mock_model, mock_tokenizer):
@@ -130,7 +130,7 @@ def test_generate_applies_backtracking(mock_model, mock_tokenizer):
 
     assert mock_operator.call_count == 5
     final_call_args = mock_tokenizer.decode.call_args[0][0]
-    assert final_call_args.shape[0] == 6
+    assert final_call_args.shape[0] == 3
 
 
 def test_generate_discards_token_on_clipped_backtrack(mock_model,
@@ -152,7 +152,7 @@ def test_generate_discards_token_on_clipped_backtrack(mock_model,
     assert mock_operator.call_count == 2
 
     final_call_args = mock_tokenizer.decode.call_args[0][0]
-    assert final_call_args.shape[0] == 4
+    assert final_call_args.shape[0] == 1
 
 
 def test_generator_repr_with_name_attributes(mock_model, mock_tokenizer):
@@ -308,7 +308,7 @@ def test_generate_stops_on_multi_token_stop_sequence(mock_model,
                                 stop_sequences=stop_sequences)
 
     assert mock_model.call_count == 2
-    assert result == 'prompt token5 User:'
+    assert result == 'final output'
 
 
 @patch('backtracking_llm.generation.torch.topk')

@@ -38,8 +38,7 @@ def test_run_turn_happy_path(mock_generator: MagicMock):
     formatted_prompt = 'User: What is the capital of France?\nAI:'
     generated_answer = 'Paris'
     mock_generator.tokenizer.apply_chat_template.return_value = formatted_prompt
-    mock_generator.generate.return_value = (
-        f'{formatted_prompt} {generated_answer}')
+    mock_generator.generate.return_value = generated_answer
 
     chat_pipeline = ChatPipeline(mock_generator)
 

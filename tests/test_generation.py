@@ -309,3 +309,41 @@ def test_generate_stops_on_multi_token_stop_sequence(mock_model,
 
     assert mock_model.call_count == 2
     assert result == 'prompt token5 User:'
+
+
+@patch('backtracking_llm.generation.torch.topk')
+def test_generate_applies_temperature_scaling_to_logits(mock_topk, mock_model,
+                                                        mock_tokenizer):
+    original_logits = torch.tensor([[[0.0, 2.0, 4.0]]])
+    mock_model.return_value.logits = original_logits
+    mock_model.config.vocab_size = 3
+
+    mock_topk.return_value = (torch.tensor([[1.0]]), torch.tensor([[2]]))
+
+    temperature = 2.0
+    expected_scaled_logits = original_logits / temperature
+
+    generator = Generator(mock_model, mock_tokenizer)
+
+    generator.generate('prompt', temperature=temperature, max_new_tokens=1)
+
+    actual_logits_passed_to_topk = mock_topk.call_args[0][0]
+    assert torch.allclose(actual_logits_passed_to_topk, expected_scaled_logits)
+
+
+@patch('backtracking_llm.generation.torch.topk')
+def test_generate_skips_temperature_scaling_when_zero(mock_topk, mock_model,
+                                                      mock_tokenizer):
+    original_logits = torch.tensor([[[0.0, 2.0, 4.0]]])
+    mock_model.return_value.logits = original_logits
+    mock_model.config.vocab_size = 3
+    mock_topk.return_value = (torch.tensor([[1.0]]), torch.tensor([[2]]))
+
+    temperature = 0.0
+
+    generator = Generator(mock_model, mock_tokenizer)
+
+    generator.generate('prompt', temperature=temperature, max_new_tokens=1)
+
+    actual_logits_passed_to_topk = mock_topk.call_args[0][0]
+    assert torch.allclose(actual_logits_passed_to_topk, original_logits)

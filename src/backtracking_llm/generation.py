@@ -7,6 +7,8 @@ from torch import Tensor
 from torch.nn import functional as F
 from transformers import PreTrainedModel, PreTrainedTokenizer, DynamicCache
 
+from backtracking_llm.decision import Operator
+
 
 class Generator:
     """Orchestrates token-by-token text generation with a backtracking
@@ -38,6 +40,7 @@ class Generator:
 
     def generate(self,
                  prompt: str,
+                 operator: Optional[Operator] = None,
                  max_new_tokens: int = 100,
                  backtrack_every_n: int = 1,
                  temperature: float = 1.0,
@@ -70,21 +73,23 @@ class Generator:
         inputs = self.tokenizer(prompt, return_tensors='pt').to(device)
         input_ids: Tensor = inputs.input_ids
         model_inputs = input_ids
+        prompt_length = input_ids.shape[1]
 
         past_key_values: Optional[DynamicCache] = None
+        generated_token_count = 0
 
         context_manager = (torch.inference_mode() if hasattr(
             torch, 'inference_mode') else torch.no_grad())
 
         with context_manager:
-            for _ in range(max_new_tokens):
+            while generated_token_count < max_new_tokens:
                 outputs = self.model(input_ids=model_inputs,
                                      past_key_values=past_key_values,
                                      use_cache=True)
                 next_token_logits = outputs.logits[:, -1, :]
                 past_key_values = outputs.past_key_values
 
-                _, top_k_probs, top_k_indices = (
+                top_k_logits, top_k_probs, top_k_indices = (
                     self._calculate_top_k_distribution(next_token_logits,
                                                        temperature, top_k))
 
@@ -94,11 +99,34 @@ class Generator:
                 if next_token_id == self.tokenizer.eos_token_id:
                     break
 
+                backtrack_count = 0
+                if (operator is not None and
+                    (generated_token_count + 1) % backtrack_every_n == 0):
+                    token_str = self.tokenizer.decode(next_token_id)
+                    backtrack_count = operator(top_k_logits.squeeze(),
+                                               top_k_probs.squeeze(),
+                                               int(chosen_index.item()),
+                                               token_str)
+
+                if backtrack_count > 0:
+                    max_backtrack = input_ids.shape[1] - prompt_length
+                    backtrack_count = min(backtrack_count, max_backtrack)
+
+                    if backtrack_count > 0:
+                        input_ids, past_key_values = self._apply_backtracking(
+                            input_ids, past_key_values, backtrack_count)
+                        generated_token_count -= backtrack_count
+                    continue
+
                 input_ids = torch.cat(
                     [input_ids,
                      torch.tensor([[next_token_id]], device=device)],
                     dim=-1)
                 model_inputs = input_ids[:, -1:]
+
+                generated_token_count += 1
+                print(f"{generated_token_count=!r}")
+                print(f"{input_ids=!r}")
 
         return self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
 
@@ -127,3 +155,27 @@ class Generator:
         top_k_probs = F.softmax(top_k_logits, dim=-1)
 
         return top_k_logits, top_k_probs, top_k_indices
+
+    def _apply_backtracking(
+            self, input_ids: Tensor, past_key_values: Optional[DynamicCache],
+            backtrack_count: int) -> Tuple[Tensor, Optional[DynamicCache]]:
+        """Truncates the input tensor and past key-value cache.
+
+        Args:
+            input_ids: The tensor of token IDs for the entire sequence.
+            past_key_values: The model's KV cache.
+            backtrack_count: The number of tokens to remove.
+
+        Returns:
+            A tuple containing the truncated `input_ids` and `past_key_values`.
+        """
+        truncated_ids = input_ids[:, :-backtrack_count]
+
+        if past_key_values is None or backtrack_count == 0:
+            return truncated_ids, past_key_values
+
+        current_length = past_key_values.get_seq_length()
+        new_length = current_length - backtrack_count
+        past_key_values.crop(new_length)
+
+        return truncated_ids, past_key_values

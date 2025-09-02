@@ -5,8 +5,10 @@ from unittest.mock import MagicMock, Mock
 import pytest
 import torch
 from torch.nn import functional as F
+from transformers import DynamicCache
 
 from backtracking_llm.generation import Generator
+from backtracking_llm.decision import Operator
 
 # pylint: disable=redefined-outer-name
 # pylint: disable=protected-access
@@ -18,17 +20,17 @@ def mock_model():
     model = MagicMock()
     model.device = 'cpu'
     model.return_value.logits = torch.randn(1, 1, 10)
-    model.return_value.past_key_values = None
+    model.return_value.past_key_values = MagicMock(spec=DynamicCache)
     return model
 
 
 @pytest.fixture
 def mock_tokenizer():
     tokenizer = MagicMock()
-    tokenizer.eos_token_id = 0
+    tokenizer.eos_token_id = 9
 
     mock_inputs = MagicMock()
-    mock_inputs.input_ids = torch.tensor([[0, 1, 2]])
+    mock_inputs.input_ids = torch.tensor([[1, 2, 3]])
     mock_inputs.to.return_value = mock_inputs
 
     tokenizer.return_value = mock_inputs
@@ -45,25 +47,44 @@ def test_generator_init(mock_model, mock_tokenizer):
 
 def test_calculate_top_k_distribution_no_temp():
     generator = Generator(Mock(), Mock())
-    logits = torch.tensor([1.0, 2.0, 10.0, 5.0, 9.0])
+    logits = torch.tensor([[1.0, 2.0, 10.0, 5.0, 9.0]])
     _, probs, indices = generator._calculate_top_k_distribution(logits,
                                                                 temperature=0.0,
                                                                 top_k=3)
 
-    assert torch.equal(indices, torch.tensor([2, 4, 3]))
+    assert torch.equal(indices, torch.tensor([[2, 4, 3]]))
     assert torch.allclose(probs,
                           F.softmax(torch.tensor([10.0, 9.0, 5.0]), dim=-1))
 
 
 def test_calculate_top_k_distribution_with_temp():
     generator = Generator(Mock(), Mock())
-    logits = torch.tensor([1.0, 2.0, 10.0, 5.0, 9.0])
+    logits = torch.tensor([[1.0, 2.0, 10.0, 5.0, 9.0]])
     _, probs, _ = generator._calculate_top_k_distribution(logits,
                                                           temperature=2.0,
                                                           top_k=3)
-    scaled_logits = torch.tensor([10.0, 9.0, 5.0]) / 2.0
+    scaled_logits = torch.tensor([[10.0, 9.0, 5.0]]) / 2.0
     expected_probs = F.softmax(scaled_logits, dim=-1)
     assert torch.allclose(probs, expected_probs)
+
+
+def test_apply_backtracking_ids_only():
+    generator = Generator(Mock(), Mock())
+    input_ids = torch.tensor([[0, 1, 2, 3, 4]])
+    truncated_ids, _ = generator._apply_backtracking(input_ids, None, 2)
+    assert torch.equal(truncated_ids, torch.tensor([[0, 1, 2]]))
+
+
+def test_apply_backtracking_with_cache():
+    generator = Generator(Mock(), Mock())
+    input_ids = torch.tensor([[0, 1, 2, 3, 4]])
+
+    mock_cache = MagicMock(spec=DynamicCache)
+    mock_cache.get_seq_length.return_value = 5
+
+    generator._apply_backtracking(input_ids, mock_cache, 2)
+
+    mock_cache.crop.assert_called_once_with(3)
 
 
 def test_generate_raises_for_invalid_backtrack_every_n(mock_model,
@@ -89,7 +110,7 @@ def test_generate_stops_at_eos_token(mock_model, mock_tokenizer):
     logits_first = torch.full((1, 1, 10), -10.0)
     logits_first[0, 0, 5] = 10.0
     logits_second = torch.full((1, 1, 10), -10.0)
-    logits_second[0, 0, 0] = 10.0
+    logits_second[0, 0, 9] = 10.0
     mock_model.return_value.logits = logits_second
     mock_model.side_effect = [
         MagicMock(logits=logits_first, past_key_values=None),
@@ -111,3 +132,44 @@ def test_generate_uses_kv_cache(mock_model, mock_tokenizer):
 
     second_call_input_ids = mock_model.call_args_list[1].kwargs['input_ids']
     assert second_call_input_ids.shape[1] == 1
+
+
+def test_generate_applies_backtracking(mock_model, mock_tokenizer):
+    mock_model.return_value.logits = torch.full((1, 1, 10), -10.0)
+    mock_model.return_value.logits[0, 0, 5] = 10.0
+
+    mock_operator = Mock(spec=Operator)
+    mock_operator.side_effect = [0, 1, 0, 0, 0]
+
+    generator = Generator(mock_model, mock_tokenizer)
+    generator.generate('prompt',
+                       operator=mock_operator,
+                       max_new_tokens=3,
+                       backtrack_every_n=1,
+                       top_k=5)
+
+    assert mock_operator.call_count == 5
+    final_call_args = mock_tokenizer.decode.call_args[0][0]
+    assert final_call_args.shape[0] == 6
+
+
+def test_generate_discards_token_on_clipped_backtrack(mock_model,
+                                                      mock_tokenizer):
+    mock_model.return_value.logits = torch.full((1, 1, 10), -10.0)
+    mock_model.return_value.logits[0, 0, 5] = 10.0
+
+    mock_operator = Mock(spec=Operator)
+    mock_operator.side_effect = [2, 0]
+
+    generator = Generator(mock_model, mock_tokenizer)
+    generator.generate('prompt',
+                       operator=mock_operator,
+                       max_new_tokens=1,
+                       backtrack_every_n=1,
+                       top_k=5)
+
+    assert mock_model.call_count == 2
+    assert mock_operator.call_count == 2
+
+    final_call_args = mock_tokenizer.decode.call_args[0][0]
+    assert final_call_args.shape[0] == 4

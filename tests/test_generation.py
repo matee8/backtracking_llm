@@ -241,3 +241,71 @@ def test_generate_caps_top_k_at_vocab_size(mock_topk, mock_model,
     called_k = mock_topk.call_args[0][1]
     assert called_k == vocab_size
     assert called_k != requested_top_k
+
+
+def test_generate_stops_on_single_token_stop_sequence(mock_model,
+                                                      mock_tokenizer):
+    token_sequence = [5, 6, 7, 8]
+    side_effects = []
+    test_vocab_size = 10
+    for token_id in token_sequence:
+        logits = torch.full((1, 1, 10), -10.0)
+        logits[0, 0, token_id] = 10.0
+        side_effects.append(MagicMock(logits=logits, past_key_values=Mock()))
+
+    mock_model.side_effect = side_effects
+    mock_model.config.vocab_size = test_vocab_size
+
+    def decode_side_effect(ids, skip_special_tokens=True):
+        _ = skip_special_tokens
+        text = ''.join([f'<{i}>' for i in ids.tolist()])
+        return text.replace('<7>', ' STOP')
+
+    mock_tokenizer.decode.side_effect = decode_side_effect
+    stop_sequences = [' STOP']
+
+    generator = Generator(mock_model, mock_tokenizer)
+
+    generator.generate('prompt',
+                       max_new_tokens=10,
+                       stop_sequences=stop_sequences)
+
+    assert mock_model.call_count == 3
+
+
+def test_generate_stops_on_multi_token_stop_sequence(mock_model,
+                                                     mock_tokenizer):
+    token_sequence = [5, 6, 7, 8]
+    side_effects = []
+    test_vocab_size = 10
+    for token_id in token_sequence:
+        logits = torch.full((1, 1, test_vocab_size), -10.0)
+        logits[0, 0, token_id] = 10.0
+        side_effects.append(MagicMock(logits=logits, past_key_values=Mock()))
+
+    mock_model.side_effect = side_effects
+    mock_model.config.vocab_size = test_vocab_size
+
+    full_sequence_map = {
+        (1, 2, 3, 5): 'prompt token5',
+        (1, 2, 3, 5, 6): 'prompt token5 User:',
+        (1, 2, 3, 5, 6, 7): 'prompt token5 User: token7'
+    }
+
+    def realistic_decode(ids, skip_special_tokens=True):
+        _ = skip_special_tokens
+        key = tuple(ids.tolist())
+        return full_sequence_map.get(key, 'final output')
+
+    mock_tokenizer.decode.side_effect = realistic_decode
+
+    stop_sequences = ['User:']
+    generator = Generator(mock_model, mock_tokenizer)
+
+    result = generator.generate('prompt',
+                                max_new_tokens=10,
+                                top_k=5,
+                                stop_sequences=stop_sequences)
+
+    assert mock_model.call_count == 2
+    assert result == 'prompt token5 User:'

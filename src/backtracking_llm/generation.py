@@ -1,7 +1,7 @@
 """Defines the core generation logic with backtracking capabilities."""
 
 import logging
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -47,7 +47,8 @@ class Generator:
                  max_new_tokens: int = 100,
                  backtrack_every_n: int = 1,
                  temperature: float = 1.0,
-                 top_k: int = 50) -> str:
+                 top_k: int = 50,
+                 stop_sequences: Optional[List[str]] = None) -> str:
         """Generates text from a prompt using the backtracking strategy.
 
         Args:
@@ -62,6 +63,8 @@ class Generator:
                 probabilities.
             top_k: The number of highest probability vocabulary tokens to keep
                 for top-k-filtering.
+            stop_sequences: A list of strings that, if generated, will cause the
+                generation to stop.
 
         Returns:
             The generated text, including the initial prompt.
@@ -144,6 +147,14 @@ class Generator:
                 model_inputs = input_ids[:, -1:]
 
                 generated_token_count += 1
+
+                if stop_sequences:
+                    current_output = self.tokenizer.decode(
+                        input_ids[0], skip_special_tokens=True)
+                    if any(seq in current_output for seq in stop_sequences):
+                        logger.info('Stopping generation due to detected stop '
+                                    'sequence.')
+                        break
 
         logger.info('Generation finished. Total tokens generated: %d.',
                     generated_token_count)

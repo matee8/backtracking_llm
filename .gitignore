@@ -208,3 +208,6 @@ __marimo__/
 
 # NixOS direnv symlinks
 .direnv
+
+# cProfile
+program.prof

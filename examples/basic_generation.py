@@ -4,6 +4,7 @@ Operator to generate text.
 """
 
 import logging
+import sys
 
 from backtracking_llm.decision import Repetition
 from backtracking_llm.generation import Generator
@@ -24,7 +25,7 @@ def main() -> None:
         generator = Generator.from_pretrained('openai-community/gpt2')
     except Exception as e:
         print(f'Failed to load model: {e}')
-        return
+        sys.exit(1)
 
     prompt = ('In a shocking finding, scientists discovered a herd of '
               'unicorns living in a remote, previously unexplored valley, '

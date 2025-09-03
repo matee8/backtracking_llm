@@ -211,3 +211,5 @@ __marimo__/
 
 # cProfile
 program.prof
+baseline.prof
+complex.prof

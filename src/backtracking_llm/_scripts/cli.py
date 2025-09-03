@@ -18,8 +18,6 @@ from backtracking_llm._scripts.ui import Spinner
 
 # pylint: disable=broad-exception-caught
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-
 OPERATOR_MAP: Dict[str, Operator] = {
     'probability_threshold': ProbabilityThreshold(),
     'entropy_threshold': EntropyThreshold(),
@@ -30,6 +28,17 @@ OPERATOR_MAP: Dict[str, Operator] = {
     'ngram_overlap': NGramOverlap(),
     'logit_threshold': LogitThreshold(),
 }
+
+
+def setup_logging(verbosity: int) -> None:
+    if verbosity == 1:
+        log_level = logging.INFO
+    elif verbosity >= 2:
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.WARNING
+
+    logging.basicConfig(level=log_level, format='%(levelname)s: %(message)s')
 
 
 def main() -> None:
@@ -64,6 +73,11 @@ def main() -> None:
         help=
         ('controls the sampling strategy by limiting the next token prediction'
          'pool'))
+    parser.add_argument('-v',
+                        '--verbose',
+                        action='count',
+                        default=0,
+                        help='increase logging verbosity')
 
     args = parser.parse_args()
     logger = logging.getLogger('backtracking_llm_cli')

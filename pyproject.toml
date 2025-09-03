@@ -61,4 +61,4 @@ dev = [
 ]
 
 [project.scripts]
-backtracking-llm = "backtracking_llm.scripts.cli:main"
+backtracking-llm = "backtracking_llm._scripts.cli:main"

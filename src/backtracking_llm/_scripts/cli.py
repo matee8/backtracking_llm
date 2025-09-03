@@ -14,6 +14,7 @@ from backtracking_llm.decision import (EntropyThreshold, LogitThreshold,
                                        ProbabilityMargin, ProbabilityThreshold,
                                        ProbabilityTrend, Repetition)
 from backtracking_llm.generation import Generator
+from backtracking_llm._scripts.ui import Spinner
 
 # pylint: disable=broad-exception-caught
 
@@ -67,15 +68,16 @@ def main() -> None:
     args = parser.parse_args()
     logger = logging.getLogger('backtracking_llm_cli')
 
-    try:
-        logger.info("Loading model '%s'... This may take a moment.",
-                    args.model_name)
-        generator = Generator.from_pretrained(args.model_name)
-    except Exception as e:
-        logger.error('Failed to load the model: %s.', e, exc_info=True)
-        logger.error('Please ensure the model name is correct, dependencies'
-                     'are installed, and you have an internet connection.')
-        sys.exit(1)
+    logger.info("Loading model '%s'... This may take a moment.",
+                args.model_name)
+    with Spinner(f"Loading model '{args.model_name}'..."):
+        try:
+            generator = Generator.from_pretrained(args.model_name)
+        except Exception as e:
+            logger.error('Failed to load the model: %s.', e, exc_info=True)
+            logger.error('Please ensure the model name is correct, dependencies'
+                         'are installed, and you have an internet connection.')
+            sys.exit(1)
 
     chat_pipeline = ChatPipeline(generator)
     history: ConversationHistory = []
@@ -86,8 +88,8 @@ def main() -> None:
         'top_k': args.top_k,
     }
 
-    print('\nModel loaded. Starting interactive chat session.')
-    print("Type 'exit' or 'quit' to end")
+    print('Model loaded. Starting interactive chat session.')
+    print("Type 'exit' or 'quit' to end\n")
 
     while True:
         try:
@@ -96,8 +98,10 @@ def main() -> None:
             if question.lower() in ['exit', 'quit']:
                 break
 
-            answer, history = chat_pipeline.run_turn(question, history,
-                                                     **generation_kwargs)
+            answer = ''
+            with Spinner('AI is thinking...'):
+                answer, history = chat_pipeline.run_turn(
+                    question, history, **generation_kwargs)
 
             print(f'AI: {answer}')
         except KeyboardInterrupt:

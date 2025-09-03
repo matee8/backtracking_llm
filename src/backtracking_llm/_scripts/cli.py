@@ -118,7 +118,7 @@ def main() -> None:
                     question, history, **generation_kwargs)
 
             print(f'AI: {answer}')
-        except KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             break
         except Exception as e:
             logger.error('\nAn unexpected error occured: %s.', e, exc_info=True)

@@ -1,10 +1,11 @@
 # pylint: disable=missing-module-docstring
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, ANY
 
 import pytest
 
 from backtracking_llm.chat import ChatPipeline
+from backtracking_llm.decision import Operator
 from backtracking_llm.generation import Generator
 
 # pylint: disable=redefined-outer-name
@@ -97,3 +98,28 @@ def test_run_turn_raises_error_if_no_chat_template(mock_generator: MagicMock):
 
     with pytest.raises(ValueError, match='does not have a chat template'):
         chat_pipeline.run_turn('A question', [])
+
+
+def test_run_turn_forwards_generation_kwargs(mock_generator: MagicMock):
+    question = "Test question"
+    initial_history = []
+
+    mock_operator = MagicMock(spec=Operator)
+
+    test_kwargs = {
+        "operator": mock_operator,
+        "temperature": 0.123,
+        "max_new_tokens": 99
+    }
+
+    mock_generator.tokenizer.apply_chat_template.return_value = "formatted_prompt"
+    mock_generator.generate.return_value = "test answer"
+
+    chat_pipeline = ChatPipeline(mock_generator)
+
+    chat_pipeline.run_turn(question, initial_history, **test_kwargs)
+
+    mock_generator.generate.assert_called_once_with(
+        ANY,
+        **test_kwargs
+    )

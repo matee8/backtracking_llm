@@ -1,6 +1,6 @@
 [project]
 name = "backtracking-llm"
-version = "0.1.0"
+version = "0.1.1"
 description = "Library for running inference on large language models with the ability to remove generated tokens."
 readme = "README.md"
 requires-python = ">=3.9"

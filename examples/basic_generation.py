@@ -14,7 +14,6 @@ from backtracking_llm.generation import Generator
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
-
 def main() -> None:
     print('Basic generation example.')
     print('This example demonstrates using the Generator with a Repetition'

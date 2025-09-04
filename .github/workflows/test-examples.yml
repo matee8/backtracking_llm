@@ -18,3 +18,5 @@ jobs:
       run: pip install -e .
     - name: Run basic_generation.py example
       run: python examples/basic_generation.py
+    - name: Run interactive_chat.py example
+      run: python examples/interactive_chat.py

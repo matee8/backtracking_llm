@@ -1,0 +1,20 @@
+name: Test examples
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-examples:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+    - name: Install dependencies
+      run: pip install -e .
+    - name: Run basic_generation.py example
+      run: python examples/basic_generation.py

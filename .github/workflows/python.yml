@@ -22,4 +22,3 @@ jobs:
       run: pytest
     - name: Run yapf
       run: yapf -r src tests
-

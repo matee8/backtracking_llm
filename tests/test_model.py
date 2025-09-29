@@ -26,6 +26,7 @@ def mock_generator() -> MagicMock:
     mock_config.model_parallel = False
     mock_config.architectures = ['MockForCausalLM']
     mock_model.config = mock_config
+    mock_model.name_or_path = 'mock-model-name'
 
     generator.model = mock_model
     mock_tokenizer = create_autospec(PreTrainedTokenizerFast, instance=True)

@@ -12,6 +12,7 @@ from backtracking_llm.generation import Generator
 
 # pylint: disable=redefined-outer-name
 # pylint: disable=protected-access
+# pylint: disable=missing-function-docstring
 
 
 @pytest.fixture

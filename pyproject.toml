@@ -44,8 +44,7 @@ Issues = "https://github.com/matee8/backtracking_llm/issues"
 
 [project.optional-dependencies]
 benchmark = [
-    "lm-eval>=0.4.0, <1.0.0",
-    "datasets<2.11.0",
+    "lm-eval>=0.4.2, <1.0.0",
 ]
 
 [build-system]

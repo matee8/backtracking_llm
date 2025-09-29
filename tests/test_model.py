@@ -23,7 +23,7 @@ def mock_generator() -> MagicMock:
     mock_config = create_autospec(PretrainedConfig, instance=True)
 
     mock_config.model_parallel = False
-    mock_config.architectures = ["MockForCausalLM"]
+    mock_config.architectures = ['MockForCausalLM']
     mock_model.config = mock_config
 
     generator.model = mock_model

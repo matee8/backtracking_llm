@@ -72,7 +72,7 @@ class BenchmarkingConfig:
             None, no HPO will be performed.
     """
     model_name_or_path: str
-    device: str = "cpu"
+    device: str = 'cpu'
     operator_to_tune: Optional[str] = None
     run_baseline: bool = True
     generation: GenerationConfig = dataclasses.field(

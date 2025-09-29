@@ -4,6 +4,8 @@ import pytest
 
 from backtracking_llm.benchmark import config
 
+# pylint: disable=no-value-for-parameter
+
 
 class TestGenerationConfig:
     """Tests the GenerationConfig dataclass."""

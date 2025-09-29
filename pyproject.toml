@@ -35,13 +35,18 @@ dependencies = [
     "torch>=2.1.2, <3.0.0",
     "numpy>=2.0.1, <3.0.0",
     "transformers>=4.51.3, <5.0.0",
-    "lm-eval>=0.4.0, <1.0.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/matee8/backtracking_llm"
 Repository = "https://github.com/matee8/backtracking_llm"
 Issues = "https://github.com/matee8/backtracking_llm/issues"
+
+[project.optional-dependencies]
+benchmark = [
+    "lm-eval>=0.4.0, <1.0.0",
+    "datasets<2.11.0",
+]
 
 [build-system]
 requires = ["hatchling >= 1.26"]

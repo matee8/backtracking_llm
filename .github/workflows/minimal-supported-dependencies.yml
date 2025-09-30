@@ -24,7 +24,11 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install uv
       run: curl -LsSf https://astral.sh/uv/install.sh | sh
+    - name: Set up virtual environment
+      run: |
+        uv venv
+        source .venv/bin/activate
     - name: Install dependencies (with ${{ matrix.resolution-strategy }} resolution)
-      run: uv pip install --system --group dev --resolution ${{ matrix.resolution-strategy }} --reinstall ".[benchmark]"
+      run: uv pip install --group dev --resolution ${{ matrix.resolution-strategy }} --reinstall ".[benchmark]"
     - name: Test with pytest
-      run: uv run --python python pytest
+      run: uv run pytest

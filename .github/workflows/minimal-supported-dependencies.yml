@@ -27,4 +27,4 @@ jobs:
     - name: Install dependencies (with ${{ matrix.resolution-strategy }} resolution)
       run: uv pip install --system --group dev --resolution ${{ matrix.resolution-strategy }} --reinstall ".[benchmark]"
     - name: Test with pytest
-      run: pytest
+      run: uv run pytest

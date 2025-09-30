@@ -28,3 +28,5 @@ jobs:
       run: uv pip install --system --group dev --resolution ${{ matrix.resolution-strategy }} --reinstall ".[benchmark]"
     - name: Test with pytest
       run: uv run pytest
+      env:
+        UV_SYSTEM_PYTHON: 1

@@ -1,7 +1,7 @@
 """Defines the configuration objects for the benchmarking pipeline."""
 
 import dataclasses
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
 @dataclasses.dataclass
@@ -34,7 +34,8 @@ class EvaluationConfig:
             None, the entire dataset is used.
         output_dir: The directory where evaluation results will be saved.
     """
-    tasks: List[str] = dataclasses.field(default_factory=List)
+    tasks: List[Union[str, Dict,
+                      object]] = dataclasses.field(default_factory=List)
     num_fewshot: int = 0
     limit: Optional[int] = None
     output_dir: str = 'benchmark_results'

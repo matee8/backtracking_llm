@@ -45,6 +45,7 @@ Issues = "https://github.com/matee8/backtracking_llm/issues"
 [project.optional-dependencies]
 benchmark = [
     "lm-eval>=0.4.4, <1.0.0",
+    "optuna>=4.0.0, <5.0.0",
 ]
 
 [build-system]

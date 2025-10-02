@@ -11,7 +11,6 @@ from backtracking_llm.decision import Never
 # pylint: disable=missing-function-docstring
 
 
-
 class TestBacktrackingLM:
     """Tests the BacktrackingLM class."""
 

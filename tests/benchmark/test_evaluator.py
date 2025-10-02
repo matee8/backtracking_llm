@@ -11,6 +11,7 @@ from backtracking_llm.decision import Never
 # pylint: disable=protected-access
 # pylint: disable=unused-argument
 
+
 @patch('lm_eval.simple_evaluate')
 class TestEvaluator:
     """Tests the Evaluator class."""

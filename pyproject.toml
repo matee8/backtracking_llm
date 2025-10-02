@@ -68,3 +68,4 @@ dev = [
 
 [project.scripts]
 backtracking-llm = "backtracking_llm._scripts.cli:main"
+backtracking-llm-benchmark = "backtracking_llm._scripts.cli:main"

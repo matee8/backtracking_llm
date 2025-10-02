@@ -20,3 +20,5 @@ jobs:
       run: python examples/basic_generation.py
     - name: Run interactive_chat.py example
       run: python examples/interactive_chat.py
+    - name: Run basic_benchmarking.py example
+      run: python examples/basic_benchmarking.py

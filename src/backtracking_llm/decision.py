@@ -9,7 +9,7 @@ model's output at a given step and return an integer value.
 
 import logging
 from collections import deque
-from typing import Optional, Protocol
+from typing import Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor
@@ -17,6 +17,7 @@ from torch import Tensor
 logger = logging.getLogger(__name__)
 
 
+@runtime_checkable
 class Operator(Protocol):
     """A protocol for decision functions
     """

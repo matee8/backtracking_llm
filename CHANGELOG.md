@@ -8,6 +8,22 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.1.1] - 2025-10-03
+
+-   Introduced a configuration-driven benchmarking module for evaluating
+    backtracking performance.
+-   Integration with `lm-evaluation-harness` for running standardized NLP
+    benchmarks.
+-   Hyperparameter optimization using `optuna` to find the best `Operator`
+    settings.
+-   New CLI script for launching benchmark runs from a YAML configuration file.
+
+### Fixed
+
+-   Corrected the stop sequence handling to robustly and automatically stop on
+    both the model's EOS token and user-defined sequences, preventing premature
+    generation termination.
+
 ## [0.1.0] - 2025-09-04
 
 ### Added
@@ -18,5 +34,6 @@ and this project adheres to
 - Stateless `ChatPipeline` for easy, multi-turn conversational interactions.
 - Interactive `backtracking-llm` CLI for local-first chatting.
 
-[unreleased]: https://github.com/matee8/backtracking_llm/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/matee8/backtracking_llm/compare/v0.1.1...HEAD
 [0.1.0]: https://github.com/matee8/backtracking_llm/releases/tag/v0.1.0
+[0.1.1]: https://github.com/matee8/backtracking_llm/releases/tag/v0.1.1

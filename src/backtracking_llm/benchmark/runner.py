@@ -5,8 +5,6 @@ import logging
 from typing import Any, Dict
 from pathlib import Path
 
-import numpy as np
-
 from backtracking_llm.benchmark.config import BenchmarkingConfig
 from backtracking_llm.benchmark.evaluator import Evaluator
 from backtracking_llm.benchmark.hpo import HyperparameterOptimizer

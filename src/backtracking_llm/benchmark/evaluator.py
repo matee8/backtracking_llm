@@ -86,6 +86,7 @@ class Evaluator:
             'pass@1,create_test',
             'bleu,none',
             'rouge2,none',
+            'exact_match,strict-match',
         ]
 
         for key in metric_keys:

@@ -5,6 +5,8 @@ import logging
 from typing import Any, Dict
 from pathlib import Path
 
+import numpy as np
+
 from backtracking_llm.benchmark.config import BenchmarkingConfig
 from backtracking_llm.benchmark.evaluator import Evaluator
 from backtracking_llm.benchmark.hpo import HyperparameterOptimizer
@@ -14,11 +16,24 @@ from backtracking_llm.generation import Generator
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_for_json(data: Any) -> Any:
+    """Recursively sanitizes a data structure to make it JSON serializable."""
+    if isinstance(data, (int, float, str, bool, type(None))):
+        return data
+    if isinstance(data, dict):
+        return {str(k): _sanitize_for_json(v) for k, v in data.items()}
+    if isinstance(data, (list, tuple)):
+        return [_sanitize_for_json(item) for item in data]
+
+    return str(data)
+
+
 def _save_results_json(data: Dict[str, Any], output_path: Path) -> None:
     """Saves a dictionary to a JSON file, creating parent dirs if needed."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    sanitized_data = _sanitize_for_json(data)
     with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4)
+        json.dump(sanitized_data, f, indent=4)
     logger.info('Results saved to %s', output_path)
 
 

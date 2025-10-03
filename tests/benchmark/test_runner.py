@@ -3,9 +3,14 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+import numpy as np
+
 from backtracking_llm.benchmark.config import (BenchmarkingConfig,
                                                EvaluationConfig, HPOConfig)
-from backtracking_llm.benchmark.runner import BenchmarkRunner, _save_results_json
+from backtracking_llm.benchmark.runner import (BenchmarkRunner,
+                                               _save_results_json,
+                                               _sanitize_for_json)
 from backtracking_llm.decision import Never
 
 # pylint: disable=protected-access
@@ -223,3 +228,84 @@ class TestBenchmarkRunner:
         runner._run_hpo()
 
         mock_optimizer_cls.assert_not_called()
+
+
+class _NonSerializableObject:
+
+    def __repr__(self) -> str:
+        return 'CustomObjectRepresentation'
+
+
+@pytest.mark.parametrize('input_data, expected_output', [
+    ({
+        'a': 1,
+        'b': 'hello',
+        'c': 3.14,
+        'd': True,
+        'e': None
+    }, {
+        'a': 1,
+        'b': 'hello',
+        'c': 3.14,
+        'd': True,
+        'e': None
+    }),
+    ({
+        'a': [1, 2, 3],
+        'b': (4, 5, 6)
+    }, {
+        'a': [1, 2, 3],
+        'b': [4, 5, 6]
+    }),
+    ({
+        123: 'value',
+        True: 'bool_key'
+    }, {
+        '123': 'value',
+        'True': 'bool_key'
+    }),
+    ({
+        'numpy_int': np.int64(100),
+        'numpy_float': np.float32(99.9),
+        'numpy_dtype': np.dtype('float64'),
+        'a_set': {1, 2, 3}
+    }, {
+        'numpy_int': '100',
+        'numpy_float': '99.9',
+        'numpy_dtype': 'float64',
+        'a_set': str({1, 2, 3})
+    }),
+    ({
+        'custom_obj': _NonSerializableObject()
+    }, {
+        'custom_obj': 'CustomObjectRepresentation'
+    }),
+    ({
+        'level1': [{
+            'a': 1
+        }, {
+            'b': {
+                np.int32(2): _NonSerializableObject()
+            }
+        }]
+    }, {
+        'level1': [{
+            'a': 1
+        }, {
+            'b': {
+                '2': 'CustomObjectRepresentation'
+            }
+        }]
+    }),
+])
+def test_sanitize_for_json(input_data, expected_output):
+    sanitized = _sanitize_for_json(input_data)
+
+    if 'a_set' in sanitized:
+        assert sanitized['a_set'] in ('{1, 2, 3}', '{1, 3, 2}', '{2, 1, 3}',
+                                      '{2, 3, 1}', '{3, 1, 2}', '{3, 2, 1}')
+
+        del sanitized['a_set']
+        del expected_output['a_set']
+
+    assert sanitized == expected_output

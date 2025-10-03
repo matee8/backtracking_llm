@@ -213,3 +213,7 @@ __marimo__/
 program.prof
 baseline.prof
 complex.prof
+
+# Benchmarking
+benchmark_results/
+experiment.yaml

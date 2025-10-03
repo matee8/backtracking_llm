@@ -150,8 +150,10 @@ class Generator:
 
                 if stop_sequences:
                     current_output = self.tokenizer.decode(
-                        input_ids[0], skip_special_tokens=True)
-                    if any(seq in current_output for seq in stop_sequences):
+                        input_ids[0, prompt_length:], skip_special_tokens=True)
+                    if (any(
+                            current_output.endswith(seq)
+                            for seq in stop_sequences)):
                         logger.info('Stopping generation due to detected stop '
                                     'sequence.')
                         break

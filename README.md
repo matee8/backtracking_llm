@@ -41,6 +41,13 @@ This is managed by two primary components:
     backtracking, from simple probability thresholds to n-gram overlap detection.
 -   High-Level Chat Pipeline: A stateless `ChatPipeline` that correctly handles
     multi-turn conversations using model-specific chat templates.
+-   Robust Benchmarking Suite: A complete, configuration-driven pipeline for
+    evaluating backtracking performance.
+
+    -   Integrates with `lm-evaluation-harness` to run on standard NLP tasks.
+    -   Includes hyperparameter optimization with `optuna` to find the best
+        `Operator` settings.
+
 -   Interactive CLI: A user-friendly command-line interface (`backtracking-llm`)
     for interactively chatting with any Hugging Face model, with full support
     for configuring backtracking.
@@ -51,8 +58,21 @@ This is managed by two primary components:
 
 This library requires Python 3.9+.
 
+### Standard Installation
+
+For using the generation and chat features in your projects.
+
 ```bash
 pip install backtracking-llm
+```
+
+### For Benchmarking and Development
+
+To run the benchmarking suite, you must install the `[benchmark]` extra, which
+includes `lm-evaluation-harness`, `optuna`, and other necessary dependencies.
+
+```bash
+pip install "backtracking-llm[benchmark]"
 ```
 
 ## Quickstart
@@ -106,6 +126,58 @@ completion = generator.generate(
 print(f"\nPrompt: {prompt}")
 print(f"Completion: {completion}")
 ```
+
+## Benchmarking
+
+The library includes a powerful command-line script for running reproducible
+benchmarks. The entire process is controlled by a single YAML configuration
+file.
+
+**1. Create a Configuration File**
+
+Create a file, e.g., `experiment.yaml`, to define your benchmark run.
+
+```yaml
+# experiment.yaml
+model_name_or_path: "Qwen/Qwen2-0.5B-Instruct"
+device: "cpu"
+
+run_baseline: true
+
+operator_to_tune: "ProbabilityThreshold"
+
+evaluation:
+  tasks: ["gsm8k"]
+  limit: 50
+  output_dir: "benchmark_results/gsm8k_qwen"
+
+generation:
+  max_new_tokens: 256
+  temperature: 0.7
+
+hpo:
+  n_trials: 20
+  search_space:
+    min_probability: [0.01, 0.3]
+    backtrack_count:
+```
+
+**2. Run the Benchmark**
+
+Execute the benchmarking script from your terminal, pointing it to your
+configuration file.
+
+```bash
+backtracking-llm-benchmark --config experiment.yaml --verbose
+```
+
+The runner will execute the pipeline as defined: run the baseline, then run the
+20-trial hyperparameter search. All results will be saved as JSON files in the
+`benchmark_results/gsm8k_qwen` directory.
+
+For an example of how to configure and run the pipeline programmatically in a
+Python script, see the `basic_benchmarking.py` file in the `examples/`
+directory.
 
 ## Available Backtracking Operators
 

@@ -10,6 +10,8 @@ and this project adheres to
 
 ## [0.1.1] - 2025-10-03
 
+### Added
+
 -   Introduced a configuration-driven benchmarking module for evaluating
     backtracking performance.
 -   Integration with `lm-evaluation-harness` for running standardized NLP

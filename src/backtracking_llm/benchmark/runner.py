@@ -113,4 +113,9 @@ class BenchmarkRunner:
         hpo_results = study.trials_dataframe()
         output_dir = Path(self.config.evaluation.output_dir)
         hpo_results.to_csv(output_dir / 'full_results.csv')
-        _save_results_json(hpo_results, output_dir / 'hpo_results.json')
+        best_results = {
+            'best_value': study.best_value,
+            'best_params': study.best_params,
+            'operator': self.config.operator_to_tune,
+        }
+        _save_results_json(best_results, output_dir / 'hpo_results.json')

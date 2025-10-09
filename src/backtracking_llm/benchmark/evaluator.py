@@ -49,6 +49,7 @@ class Evaluator:
                                           tasks=self.config.tasks,
                                           limit=self.config.limit,
                                           num_fewshot=self.config.num_fewshot,
+                                          confirm_run_unsafe_code=True,
                                           gen_kwargs=gen_kwargs)
 
         if results is None:

@@ -66,6 +66,8 @@ class BenchmarkingConfig:
         operator_to_tune: The name of the decision Operator class to optimize.
             If None, only a baseline evaluation is run (if `run_baseline` is
             True).
+        model_kwargs: A dictionary of keyword arguments to pass directly to the
+            Hugging Face `from_pretrained` method.
         run_baseline: Whether to run a baseline evaluation without backtracking.
         generation: The configuration for the text generation process.
         evaluation: The configuration for the evaluation tasks.
@@ -73,6 +75,7 @@ class BenchmarkingConfig:
             None, no HPO will be performed.
     """
     model_name_or_path: str
+    model_kwargs: Dict[str, Any] = dataclasses.field(default_factory=dict)
     device: str = 'cpu'
     operator_to_tune: Optional[str] = None
     run_baseline: bool = True

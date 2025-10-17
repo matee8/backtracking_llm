@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from memory_profiler import profile
 from backtracking_llm.benchmark.config import (BenchmarkingConfig,
                                                EvaluationConfig,
                                                GenerationConfig, HPOConfig)
@@ -55,6 +56,7 @@ def _load_config(config_path: Path) -> BenchmarkingConfig:
             f'Missing or invalid configuration parameter: {e}') from e
 
 
+@profile
 def main() -> None:
     """The main entry point for the benchmarking CLI."""
     parser = argparse.ArgumentParser(

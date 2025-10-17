@@ -45,7 +45,8 @@ class BenchmarkRunner:
             config: The main configuration object for the entire run.
         """
         self.config = config
-        self.generator = Generator.from_pretrained(config.model_name_or_path)
+        self.generator = Generator.from_pretrained(config.model_name_or_path,
+                                                   **config.model_kwargs)
         self.generator.model.to(config.device)
 
     def run(self) -> None:

@@ -8,6 +8,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-10-18
+
+### Added
+
+-   Added configuration option for passing keyword arguments to model loading.
+-   Every hyperparameter search trial is saved in a CSV file.
+
+### Fixed
+
+-   Allowed code execution within benchmarks.
+-   Best results are now correctly saved in a JSON file.
+
 ## [0.2.1] - 2025-10-07
 
 ### Fixed
@@ -42,7 +54,8 @@ and this project adheres to
 - Stateless `ChatPipeline` for easy, multi-turn conversational interactions.
 - Interactive `backtracking-llm` CLI for local-first chatting.
 
-[Unreleased]: https://github.com/matee8/backtracking_llm/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/matee8/backtracking_llm/compare/v0.2.2...HEAD
 [0.1.0]: https://github.com/matee8/backtracking_llm/releases/tag/v0.1.0
 [0.2.0]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.0
 [0.2.1]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.1
+[0.2.2]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.2

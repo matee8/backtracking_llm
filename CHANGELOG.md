@@ -8,6 +8,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.2.3] - 2025-10-19
+
+### Fixed
+
+-   Removed memory profiling from main benchmarking script.
+
 ## [0.2.2] - 2025-10-18
 
 ### Added

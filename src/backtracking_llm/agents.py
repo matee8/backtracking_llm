@@ -1,8 +1,10 @@
 """Defines machine-learning based operators."""
 
+from typing import List
+
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
+from torch.distributions import Categorical
 
 
 class RLAgentOperator(nn.Module):
@@ -38,6 +40,8 @@ class RLAgentOperator(nn.Module):
         self.network = nn.Sequential(nn.Linear(input_dim, hidden_dim),
                                      nn.ReLU(),
                                      nn.Linear(hidden_dim, num_actions))
+
+        self.saved_log_probs: List[Tensor] = []
 
     def forward(self, state_features: Tensor) -> Tensor:
         """Performs a forward pass to get the logits for each action.
@@ -103,19 +107,15 @@ class RLAgentOperator(nn.Module):
         Returns:
             The number of tokens to backtrack, as chosen by the agent.
         """
-        self.eval()
+        device = next(self.parameters()).device
+        features = self._extract_features(probabilities, position).to(device)
 
-        context_manager = (torch.inference_mode() if hasattr(
-            torch, 'inference_mode') else torch.no_grad())
+        action_logits = self.forward(features)
 
-        with context_manager:
-            device = next(self.parameters()).device
-            features = self._extract_features(probabilities,
-                                              position).to(device)
+        action_dist = Categorical(logits=action_logits)
+        action_tensor = action_dist.sample()
 
-            action_logits = self.forward(features)
+        if self.training:
+            self.saved_log_probs.append(action_dist.log_prob(action_tensor))
 
-            action_probs = F.softmax(action_logits, dim=-1)
-            action = torch.multinomial(action_probs, num_samples=1).item()
-
-        return int(action)
+        return int(action_tensor.item())

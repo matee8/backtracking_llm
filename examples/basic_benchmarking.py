@@ -63,7 +63,7 @@ def main() -> None:
         print('\nBenchmark pipeline finished successfully!')
         print(
             f"Results have been saved to the '{config.evaluation.output_dir}' "
-            "directory.")
+            'directory.')
     except Exception as e:
         logging.error('The benchmark example failed: %s', e, exc_info=True)
         sys.exit(1)

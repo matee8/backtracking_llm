@@ -2,7 +2,6 @@
 
 from typing import Any, Dict, List, Optional, Tuple
 
-import gymnasium as gym
 import numpy as np
 import torch
 from gymnasium import Env

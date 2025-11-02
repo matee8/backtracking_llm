@@ -1,13 +1,11 @@
 # pylint: disable=missing-module-docstring
 
-from unittest.mock import MagicMock, Mock, create_autospec
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 import torch
 from gymnasium.spaces import Box, Discrete
-from transformers import (PreTrainedModel, PretrainedConfig,
-                          PreTrainedTokenizerFast)
 
 from backtracking_llm.generation import Generator
 from backtracking_llm.rl.env import BacktrackingEnv

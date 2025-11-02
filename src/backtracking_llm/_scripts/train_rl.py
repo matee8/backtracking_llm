@@ -16,6 +16,7 @@ from backtracking_llm.benchmark.config import (EvaluationConfig, FullRLConfig,
                                                GenerationConfig,
                                                RLTrainingConfig)
 from backtracking_llm.benchmark.rl_env import RLEnvironment
+from backtracking_llm.features import SimpleFeatureExtractor
 from backtracking_llm.generation import Generator
 
 # pylint: disable=broad-exception-caught
@@ -77,8 +78,17 @@ class RLTrainer:
 
         self.env = RLEnvironment(generator, config.evaluation,
                                  config.generation)
+
+        feature_extractor = SimpleFeatureExtractor()
+        if feature_extractor.feature_dim != config.rl_training.feature_dim:
+            raise ValueError(
+                f'Feature dimension mismatch: The configured feature extractor '
+                f'has a dimension of {feature_extractor.feature_dim}, but the '
+                f'training config specifies feature_dim='
+                f'{config.rl_training.feature_dim}. Please make them match.')
+
         self.agent = RLAgentOperator(
-            input_dim=config.rl_training.feature_dim,
+            feature_extractor=feature_extractor,
             num_actions=config.rl_training.num_actions).to(config.device)
         self.optimizer = Adam(self.agent.parameters(),
                               lr=config.rl_training.learning_rate)

@@ -14,6 +14,7 @@ from backtracking_llm.benchmark.rl_env import RLEnvironment
 # pylint: disable=missing-class-docstring
 # pylint: disable=broad-exception-caught
 
+
 @pytest.fixture
 def mock_generator() -> MagicMock:
     return MagicMock()

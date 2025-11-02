@@ -1,9 +1,13 @@
 """Defines machine-learning based operators."""
 
+<<<<<<< HEAD
 from typing import List
 
+=======
+import torch
+>>>>>>> parent of baec8be (feat(scripts): implement basic REINFORCE training loop)
 from torch import Tensor, nn
-from torch.distributions import Categorical
+from torch.nn import functional as F
 
 from backtracking_llm.features import FeatureExtractor
 
@@ -42,8 +46,6 @@ class RLAgentOperator(nn.Module):
             nn.Linear(feature_extractor.feature_dim, hidden_dim), nn.ReLU(),
             nn.Linear(hidden_dim, num_actions))
 
-        self.saved_log_probs: List[Tensor] = []
-
     def forward(self, state_features: Tensor) -> Tensor:
         """Performs a forward pass to get the logits for each action.
 
@@ -75,12 +77,17 @@ class RLAgentOperator(nn.Module):
         device = next(self.parameters()).device
         features = self.feature_extractor(probabilities, position).to(device)
 
-        action_logits = self.forward(features)
+        context_manager = (torch.inference_mode() if hasattr(
+            torch, 'inference_mode') else torch.no_grad())
 
-        action_dist = Categorical(logits=action_logits)
-        action_tensor = action_dist.sample()
+        with context_manager:
+            device = next(self.parameters()).device
+            features = self._extract_features(probabilities,
+                                              position).to(device)
 
-        if self.training:
-            self.saved_log_probs.append(action_dist.log_prob(action_tensor))
+            action_logits = self.forward(features)
 
-        return int(action_tensor.item())
+            action_probs = F.softmax(action_logits, dim=-1)
+            action = torch.multinomial(action_probs, num_samples=1).item()
+
+        return int(action)

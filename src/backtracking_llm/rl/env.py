@@ -4,11 +4,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
-import torch
 from gymnasium import Env
 from gymnasium.spaces import Box, Discrete
-from torch import Tensor
-from transformers import DynamicCache
 
 from backtracking_llm.generation import Generator
 from backtracking_llm.rl.features import FeatureExtractor
@@ -65,10 +62,6 @@ class BacktrackingEnv(Env):
         self._current_prompt_idx: int = 0
         self._current_generated_text: str = ''
 
-        self._prompt_iterator = iter(self.prompts)
-        self._input_ids: Optional[Tensor] = None
-        self._past_key_values: Optional[DynamicCache] = None
-
     def reset(
         self,
         *,
@@ -90,29 +83,6 @@ class BacktrackingEnv(Env):
         except StopIteration:
             self._prompt_iterator = iter(self.prompts)
             prompt = next(self._prompt_iterator)
-
-        device = self.generator.model.device
-        inputs = self.generator.tokenizer(prompt,
-                                          return_tensors='pt').to(device)
-        self._input_ids = inputs.input_ids
-
-        context_manager = (torch.inference_mode() if hasattr(
-            torch, 'inference_mode') else torch.no_grad())
-
-        with context_manager:
-            outputs = self.generator.model(input_ids=self._input_ids,
-                                           use_cache=True)
-            next_token_logits = outputs.logits[:, -1, :]
-            self._past_key_values = outputs.past_key_values
-
-        top_k_logits, _ = torch.topk(next_token_logits,
-                                     self.generator.model.config.vocab_size)
-        top_k_probs = torch.nn.functional.softmax(top_k_logits, dim=-1)
-
-        observation = self.feature_extractor(top_k_logits.squeeze(0),
-                                             top_k_probs.squeeze(0))
-
-        return observation, {}
 
     def step(
             self, action: int

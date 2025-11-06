@@ -84,37 +84,3 @@ class BenchmarkingConfig:
     evaluation: EvaluationConfig = dataclasses.field(
         default_factory=EvaluationConfig)
     hpo: Optional[HPOConfig] = None
-
-
-@dataclasses.dataclass
-class RLTrainingConfig:
-    """Configuration for an RL training run.
-
-    Attributes:
-        num_episodes: The total number of evaluation runs to train the agent on.
-        learning_rate: The learning rate for the Adam optimizer.
-        num_actions: The number of discrete backtrack actions (e.g., a value of
-            3 corresponds to {0, 1, 2} tokens).
-        feature_dim: The dimensionality of the feature vector for the agent.
-        output_model_path: The file path to save the trained agent's state
-            dictionary.
-    """
-    num_episodes: int = 100
-    learning_rate: float = 0.001
-    num_actions: int = 3
-    feature_dim: int = 3
-    output_model_path: str = 'rl_agent.pt'
-
-
-@dataclasses.dataclass
-class FullRLConfig:
-    """The root configuration for a complete RL training pipeline."""
-    model_name_or_path: str
-    model_kwargs: Dict[str, Any] = dataclasses.field(default_factory=dict)
-    device: str = 'cpu'
-    generation: GenerationConfig = dataclasses.field(
-        default_factory=GenerationConfig)
-    evaluation: EvaluationConfig = dataclasses.field(
-        default_factory=EvaluationConfig)
-    rl_training: RLTrainingConfig = dataclasses.field(
-        default_factory=RLTrainingConfig)

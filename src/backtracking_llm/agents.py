@@ -2,10 +2,9 @@
 
 from typing import List
 
+import torch
 from torch import Tensor, nn
 from torch.distributions import Categorical
-
-from backtracking_llm.features import FeatureExtractor
 
 
 class RLAgentOperator(nn.Module):
@@ -20,14 +19,14 @@ class RLAgentOperator(nn.Module):
     """
 
     def __init__(self,
-                 feature_extractor: FeatureExtractor,
+                 input_dim: int,
                  num_actions: int,
                  hidden_dim: int = 64) -> None:
         """Initializes the RL Agent Operator
 
         Args:
-            feature_extractor: An object that can convert a generation state
-                into a feature tensor.
+            input_dim: The size of the feature vector that will be extracted
+                from the generation state.
             num_actions: The number of discrete backtrack actions to choose
                 from. For example, a value of 3 corresponds to the action
                 space {0, 1, 2}.
@@ -35,12 +34,12 @@ class RLAgentOperator(nn.Module):
         """
         super().__init__()
 
-        self.feature_extractor = feature_extractor
+        self.input_dim = input_dim
         self.num_actions = num_actions
 
-        self.network = nn.Sequential(
-            nn.Linear(feature_extractor.feature_dim, hidden_dim), nn.ReLU(),
-            nn.Linear(hidden_dim, num_actions))
+        self.network = nn.Sequential(nn.Linear(input_dim, hidden_dim),
+                                     nn.ReLU(),
+                                     nn.Linear(hidden_dim, num_actions))
 
         self.saved_log_probs: List[Tensor] = []
 
@@ -55,6 +54,42 @@ class RLAgentOperator(nn.Module):
             A tensor of logits for each possible backtrack action.
         """
         return self.network(state_features)
+
+    def _extract_features(self, probabilities: Tensor, position: int) -> Tensor:
+        """A placeholder for a feature extraction function.
+
+        NOTE: This is a simple, placeholder implementation. A more robust and
+        configurable feature engineering function should be developed to allow
+        for experimentation.
+
+        Args:
+            probabilities: The top-k probability distribution.
+            position: The index of the chosen token within that distribution.
+
+        Returns:
+            A feature tensor for the policy network.
+
+        Raises:
+            ValueError: If this placeholder's hard-coded feature dimension does
+                not match the `input_dim` the model was initialized with.
+        """
+        chosen_prob = probabilities[position].item()
+
+        non_zero_probs = probabilities[probabilities > 0]
+        entropy = -(non_zero_probs * non_zero_probs.log()).sum().item()
+
+        if len(probabilities) > 1:
+            top_two = torch.topk(probabilities, 2).values
+            margin = (top_two[0] - top_two[1]).item()
+        else:
+            margin = 1.0
+
+        if self.input_dim != 3:
+            raise ValueError(
+                f'This placeholder feature extractor produces 3 features, but '
+                f'the model was initialized with input_dim={self.input_dim}.')
+
+        return torch.tensor([chosen_prob, entropy, margin], dtype=torch.float32)
 
     def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
@@ -73,7 +108,7 @@ class RLAgentOperator(nn.Module):
             The number of tokens to backtrack, as chosen by the agent.
         """
         device = next(self.parameters()).device
-        features = self.feature_extractor(probabilities, position).to(device)
+        features = self._extract_features(probabilities, position).to(device)
 
         action_logits = self.forward(features)
 

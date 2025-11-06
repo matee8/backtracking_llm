@@ -60,9 +60,8 @@ and this project adheres to
 - Stateless `ChatPipeline` for easy, multi-turn conversational interactions.
 - Interactive `backtracking-llm` CLI for local-first chatting.
 
-[Unreleased]: https://github.com/matee8/backtracking_llm/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/matee8/backtracking_llm/compare/v0.2.2...HEAD
 [0.1.0]: https://github.com/matee8/backtracking_llm/releases/tag/v0.1.0
 [0.2.0]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.0
 [0.2.1]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.1
 [0.2.2]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.2
-[0.2.3]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.3

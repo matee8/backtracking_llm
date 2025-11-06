@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """The command-line interface for the benchmarking module."""
 
 import argparse

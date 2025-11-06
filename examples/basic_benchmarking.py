@@ -26,8 +26,9 @@ def main() -> None:
     print('1. Run a baseline evaluation on the "arc_easy" task.')
     print('2. Run a 5-trial hyperparameter search for the '
           '"ProbabilityThreshold" operator.')
-    print('\nNOTE: This will download a model (~1GB) and datasets on the '
-          'first run.')
+    print(
+        '\nNOTE: This will download a model (~1GB) and datasets on the first run.'
+    )
 
     try:
         # 1. Define the configuration for the entire run.
@@ -62,8 +63,8 @@ def main() -> None:
 
         print('\nBenchmark pipeline finished successfully!')
         print(
-            f"Results have been saved to the '{config.evaluation.output_dir}' "
-            "directory.")
+            f"Results have been saved to the '{config.evaluation.output_dir}' directory."
+        )
     except Exception as e:
         logging.error('The benchmark example failed: %s', e, exc_info=True)
         sys.exit(1)

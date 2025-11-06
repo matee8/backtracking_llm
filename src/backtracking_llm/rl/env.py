@@ -1,14 +1,11 @@
 """Defines the Gymnasium environment for training a backtracking agent."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Sequence
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import Env
 from gymnasium.spaces import Box, Discrete
-
-from backtracking_llm.generation import Generator
-from backtracking_llm.rl.features import FeatureExtractor
 
 
 class BacktrackingEnv(Env):
@@ -22,67 +19,40 @@ class BacktrackingEnv(Env):
 
     metadata = {'render_modes': {}}
 
-    def __init__(self,
-                 generator: Generator,
-                 feature_extractor: FeatureExtractor,
-                 prompts: List[str],
-                 max_backtrack_steps: int = 2) -> None:
+    def __init__(self, num_actions: int,
+                 observation_shape: Sequence[int]) -> None:
         """Initializes the BacktrackingEnv.
 
-        Args:
-            generator: The pre-configured Generator instance.
-            feature_extractor: The object to extract observation features.
-            prompts: A list of initial prompts to use for episodes.
-            max_backtrack_steps: The maximum number of tokens to backtrack.
-                The action space will be `max_backtrack_steps + 1`.
-
-        Raises:
-            ValueError: if `prompts` is an empty list, or if
-                `max_backtrack_steps` is negative.
+        In subsequent commits, this will be updated to accept a Generator,
+        evaluation configuration, a feature extractor, and other necessary
+        components.
         """
         super().__init__()
-        if not prompts:
-            raise ValueError('prompts list cannot be empty.')
-        if max_backtrack_steps < 0:
-            raise ValueError('max_backtrack_steps cannot be negative.')
 
-        self.generator = generator
-        self.feature_extractor = feature_extractor
-        self.prompts = prompts
-        self.max_backtrack_steps = max_backtrack_steps
-
-        self.action_space = Discrete(self.max_backtrack_steps + 1)
-        self.observation_space = Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=self.feature_extractor.shape,
-            dtype=np.float32,
-        )
-
-        self._current_prompt_idx: int = 0
-        self._current_generated_text: str = ''
+        self.action_space = Discrete(num_actions)
+        self.observation_space = Box(low=-np.inf,
+                                     high=np.inf,
+                                     shape=observation_shape,
+                                     dtype=np.float32)
 
     def reset(
         self,
         *,
         seed: Optional[int] = None,
-        options: Optional[Dict[str, Any]] = None,
+        options: Optional[Dict[str, Any]] = None
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """Resets the environment to the beginning of a new episode.
 
-        This involves selecting the next prompt from the list, tokenizing it,
-        and performing an initial forward pass to get the first observation.
+        This involves selecting a new prompt from the evaluation dataset and
+        initializing the generation state.
 
         Returns:
             A tuple containing the initial observation and an info dictionary.
         """
         super().reset(seed=seed)
 
-        try:
-            prompt = next(self._prompt_iterator)
-        except StopIteration:
-            self._prompt_iterator = iter(self.prompts)
-            prompt = next(self._prompt_iterator)
+        raise NotImplementedError(
+            'The `reset` method must be implemented to start a new episode.')
 
     def step(
             self, action: int

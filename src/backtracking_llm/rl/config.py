@@ -4,6 +4,8 @@ import dataclasses
 from pathlib import Path
 from typing import Optional
 
+# pylint: disable=not-a-mapping
+
 
 @dataclasses.dataclass
 class JudgeConfig:
@@ -73,7 +75,8 @@ class TrainingConfig:
     """Configuration for RL training.
 
     Attributes:
-        policy_type: SB3 policy class name (MlpPolicy, CnnPolicy, MultiInputPolicy).
+        policy_type: SB3 policy class name (MlpPolicy, CnnPolicy, 
+            MultiInputPolicy).
         total_timesteps: Total environment steps to train for.
         learning_rate: Learning rate for optimizer.
         n_steps: Number of steps per rollout.
@@ -97,7 +100,7 @@ class TrainingConfig:
         supported_policies = ('MlpPolicy', 'CnnPolicy', 'MultiInputPolicy')
         if self.policy_type not in supported_policies:
             raise ValueError(f'Unsupported policy_type `{self.policy_type}`. '
-                             f'Supported: {"`, `".join(supported_policies)}')
+                             f"Supported: {'`, `'.join(supported_policies)}")
 
         if self.total_timesteps < 1:
             raise ValueError('`total_timesteps` must be positive')
@@ -109,7 +112,7 @@ class TrainingConfig:
             raise ValueError('`batch_size` must be positive')
         if self.n_epochs < 1:
             raise ValueError('`n_epochs` must be positive')
-        if not (0 <= self.gamma <= 1):
+        if not 0 <= self.gamma <= 1:
             raise ValueError('`gamma` must be between 0 and 1')
 
 

@@ -1,4 +1,4 @@
-# pylint: ignore=missing-module-docstring
+# pylint: disable=missing-module-docstring
 
 import dataclasses
 import pathlib
@@ -12,6 +12,10 @@ from backtracking_llm.rl.config import (
     RLConfig,
     TrainingConfig,
 )
+
+# pylint: disable=missing-class-docstring
+# pylint: disable=unexpected-keyword-arg
+# pylint: disable=no-value-for-parameter
 
 
 class TestJudgeConfig:
@@ -351,6 +355,6 @@ class TestRLConfig:
         assert 'model_name_or_path' in repr_str
         assert 'gpt2' in repr_str
 
-    def test_output_path_none_raises(self):
-        with pytest.raises(ValueError, match='`output_path` cannot be None'):
-            RLConfig(output_path=None)  # type: ignore
+    def test_output_dir_none_raises(self):
+        with pytest.raises(ValueError, match='`output_dir` cannot be None'):
+            RLConfig(model_name_or_path='gpt2', output_dir=None)  # type: ignore

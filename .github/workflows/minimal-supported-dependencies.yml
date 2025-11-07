@@ -29,6 +29,6 @@ jobs:
         uv venv
         source .venv/bin/activate
     - name: Install dependencies (with ${{ matrix.resolution-strategy }} resolution)
-      run: uv pip install --group dev --resolution ${{ matrix.resolution-strategy }} --reinstall ".[benchmark]"
+      run: uv pip install --group dev --resolution ${{ matrix.resolution-strategy }} --reinstall ".[benchmark,rl]"
     - name: Test with pytest
       run: uv run pytest

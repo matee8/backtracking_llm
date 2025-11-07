@@ -15,7 +15,7 @@ jobs:
     - name: Install uv
       run: curl -LsSf https://astral.sh/uv/install.sh | sh
     - name: Install development environment
-      run: uv pip install --system --group dev ".[benchmark]"
+      run: uv pip install --system --group dev ".[benchmark,rl]"
     - name: Run pylint
       run: pylint src tests
     - name: Run pytest

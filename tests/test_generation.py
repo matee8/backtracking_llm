@@ -1,10 +1,12 @@
 # pylint: disable=missing-module-docstring
 
+import copy
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import torch
-from transformers import DynamicCache, PreTrainedTokenizer, PreTrainedModel
+from transformers import (DynamicCache, PreTrainedTokenizer, PreTrainedModel,
+                          AutoModelForCausalLM, AutoTokenizer)
 
 from backtracking_llm.generation import Generator, GenerationState
 from backtracking_llm.decision import Operator
@@ -541,3 +543,256 @@ class TestGenerationStateEdgeCases:
         assert state.generated_count == 0
         assert state.max_new_tokens == 100
         assert state.generated_ids.numel() == 0
+
+
+@pytest.fixture
+def generator():
+    model = AutoModelForCausalLM.from_pretrained('gpt2',
+                                                 torch_dtype=torch.float32)
+    tokenizer = AutoTokenizer.from_pretrained('gpt2')
+    return Generator(model, tokenizer)
+
+
+class TestInitializeStateBasic:
+
+    def test_initialize_state_creates_state(self, generator):
+        generator._initialize_state('Hello world')
+
+        assert generator._state is not None
+        assert isinstance(generator._state, GenerationState)
+
+    def test_initialize_state_prompt_tokenized(self, generator):
+        generator._initialize_state('Hello world')
+
+        assert generator._state.input_ids is not None
+        assert generator._state.input_ids.dim() == 2
+        assert generator._state.input_ids.shape[0] == 1
+        assert generator._state.input_ids.shape[1] > 0
+
+    def test_initialize_state_prompt_length_recorded(self, generator):
+        test_prompt = 'Hello world'
+        generator._initialize_state(test_prompt)
+
+        expected_length = generator.tokenizer(
+            test_prompt, return_tensors='pt').input_ids.shape[1]
+        assert generator._state.prompt_length == expected_length
+        assert generator._state.generated_count == 0
+
+    def test_initialize_state_default_params(self, generator):
+        generator._initialize_state('Test')
+
+        assert generator._state.max_new_tokens == 100
+        assert generator._state.temperature == 1.0
+        assert generator._state.top_k == 50
+
+    def test_initialize_state_custom_params(self, generator):
+        generator._initialize_state(
+            'Test',
+            max_new_tokens=200,
+            temperature=0.8,
+            top_k=30,
+        )
+
+        assert generator._state.max_new_tokens == 200
+        assert generator._state.temperature == 0.8
+        assert generator._state.top_k == 30
+
+
+class TestInitializeStateValidation:
+
+    def test_empty_prompt_raises(self, generator):
+        with pytest.raises(ValueError, match='Prompt cannot be empty'):
+            generator._initialize_state('')
+
+    def test_whitespace_prompt_raises(self, generator):
+        with pytest.raises(ValueError, match='Prompt cannot be empty'):
+            generator._initialize_state('   ')
+
+    def test_invalid_max_new_tokens_raises(self, generator):
+        with pytest.raises(ValueError, match='`max_new_tokens` must be positive'):
+            generator._initialize_state('Test', max_new_tokens=0)
+
+        with pytest.raises(ValueError, match='`max_new_tokens` must be positive'):
+            generator._initialize_state('Test', max_new_tokens=-1)
+
+    def test_invalid_temperature_raises(self, generator):
+        with pytest.raises(ValueError, match='`temperature` must be positive'):
+            generator._initialize_state('Test', temperature=0.0)
+
+        with pytest.raises(ValueError, match='`temperature` must be positive'):
+            generator._initialize_state('Test', temperature=-0.5)
+
+    def test_invalid_top_k_raises(self, generator):
+        with pytest.raises(ValueError, match='`top_k` must be positive'):
+            generator._initialize_state('Test', top_k=0)
+
+        with pytest.raises(ValueError, match='`top_k` must be positive'):
+            generator._initialize_state('Test', top_k=-10)
+
+
+class TestInitializeStateDeviceHandling:
+
+    def test_default_device_is_model_device(self, generator):
+        generator._initialize_state('Test')
+
+        assert generator._state.input_ids.device == generator.model.device
+
+    def test_custom_device_override(self, generator):
+        generator._initialize_state('Test', device='cpu')
+
+        assert generator._state.input_ids.device.type == 'cpu'
+
+    def test_device_matches_input(self, generator):
+        generator._initialize_state('Test')
+
+        assert generator._state.input_ids.device == generator._state.device
+
+
+class TestInitializeStateTensorHandling:
+
+    def test_1d_input_converted_to_2d(self, generator):
+        generator._initialize_state('Test')
+
+        assert generator._state.input_ids.dim() == 2
+        assert generator._state.batch_size == 1
+
+    def test_tokenizer_truncation_respected(self, generator):
+        long_prompt = 'word ' * 1000
+
+        generator._initialize_state(long_prompt, max_seq_length=50)
+
+        assert generator._state.input_ids.shape[1] <= 50
+
+    def test_tokenizer_no_truncation_by_default(self, generator):
+        normal_prompt = 'Short prompt'
+        generator._initialize_state(normal_prompt)
+
+        expected_length = generator.tokenizer(
+            normal_prompt, return_tensors='pt').input_ids.shape[1]
+        assert generator._state.input_ids.shape[1] == expected_length
+
+    def test_past_key_values_initialized_none(self, generator):
+        generator._initialize_state('Test')
+
+        assert generator._state.past_key_values is None
+
+    def test_all_state_fields_populated(self, generator):
+        generator._initialize_state(
+            'Test prompt',
+            max_new_tokens=150,
+            temperature=0.7,
+            top_k=40,
+        )
+
+        state = generator._state
+
+        assert isinstance(state.input_ids, torch.Tensor)
+        assert state.past_key_values is None
+        assert isinstance(state.prompt_length, int)
+        assert isinstance(state.generated_count, int)
+        assert isinstance(state.max_new_tokens, int)
+        assert isinstance(state.temperature, float)
+        assert isinstance(state.top_k, int)
+
+
+class TestInitializeStateIntegration:
+
+    def test_initialize_state_does_not_affect_generate(self, generator):
+        generator._initialize_state('Test prompt')
+
+        result = generator.generate('Another prompt', max_new_tokens=10)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_multiple_initialize_state_calls_override(self, generator):
+        generator._initialize_state('First prompt')
+        first_length = generator._state.prompt_length
+
+        generator._initialize_state('Second prompt that is longer')
+        second_length = generator._state.prompt_length
+
+        assert second_length > first_length
+        assert 'Second prompt' in generator.tokenizer.decode(
+            generator._state.input_ids[0])
+
+    def test_initialize_state_preserves_model_state(self, generator):
+        original_params = {
+            k: v.clone() for k, v in generator.model.named_parameters()
+        }
+
+        generator._initialize_state('Test')
+
+        for k, v in generator.model.named_parameters():
+            assert torch.equal(v, original_params[k])
+
+    def test_state_isolation_between_generators(self):
+        model1 = AutoModelForCausalLM.from_pretrained('gpt2',
+                                                      torch_dtype=torch.float32)
+        tokenizer1 = AutoTokenizer.from_pretrained('gpt2')
+        gen1 = Generator(model1, tokenizer1)
+
+        model2 = AutoModelForCausalLM.from_pretrained('gpt2',
+                                                      torch_dtype=torch.float32)
+        tokenizer2 = AutoTokenizer.from_pretrained('gpt2')
+        gen2 = Generator(model2, tokenizer2)
+
+        gen1._initialize_state('Prompt one')
+        gen2._initialize_state('Prompt two.')
+
+        assert not torch.equal(gen1._state.input_ids, gen2._state.input_ids)
+        assert gen1._state.prompt_length != gen2._state.prompt_length
+
+
+class TestInitializeStateEdgeCases:
+
+    def test_single_token_prompt(self, generator):
+        generator._initialize_state('Hi')
+
+        assert generator._state.prompt_length == 1
+        assert generator._state.generated_count == 0
+
+    def test_very_long_prompt(self, generator):
+        long_prompt = 'word ' * 100
+        generator._initialize_state(long_prompt)
+
+        assert generator._state.prompt_length > 0
+        assert generator._state.prompt_length < 200
+
+    def test_prompt_with_special_characters(self, generator):
+        special_prompt = 'Hello!\nNew line\tTab 😊'
+        generator._initialize_state(special_prompt)
+
+        assert generator._state.input_ids.shape[1] > 0
+
+    def test_prompt_unicode_handling(self, generator):
+        unicode_prompt = 'Hello 世界 🌍'
+        generator._initialize_state(unicode_prompt)
+
+        assert generator._state.input_ids is not None
+
+    def test_empty_generation_params_uses_defaults(self, generator):
+        generator._initialize_state('Test', **{})
+
+        assert generator._state.max_new_tokens == 100
+        assert generator._state.temperature == 1.0
+        assert generator._state.top_k == 50
+
+    def test_partial_generation_params_merged_with_defaults(self, generator):
+        generator._initialize_state('Test', temperature=0.5)
+
+        assert generator._state.temperature == 0.5
+        assert generator._state.max_new_tokens == 100
+        assert generator._state.top_k == 50
+
+
+def test_model_device_attribute_missing(mock_model, mock_tokenizer):
+    if hasattr(mock_model, 'device'):
+        delattr(mock_model, 'device')
+
+    generator = Generator(mock_model, mock_tokenizer)
+
+    generator.model = mock_model
+
+    with pytest.raises(RuntimeError,
+                       match='Model does not have a device attribute'):
+        generator._initialize_state('Test')

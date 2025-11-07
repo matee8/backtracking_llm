@@ -39,7 +39,7 @@ class GenerationState:
     def __post_init__(self):
         """Validate state consistency."""
         if self.input_ids.dim() not in [1, 2]:
-            raise ValueError(f'input_ids must be 1D or 2D tensor')
+            raise ValueError('input_ids must be 1D or 2D tensor')
 
         if self.input_ids.dim() == 1:
             self.input_ids = self.input_ids.unsqueeze(0)
@@ -276,3 +276,61 @@ class Generator:
         past_key_values.crop(new_length)
 
         return truncated_ids, past_key_values
+
+    def _initialize_state(self,
+                          prompt: str,
+                          max_new_tokens: int = 100,
+                          temperature: float = 1.0,
+                          top_k: int = 50,
+                          device: str = 'cpu',
+                          max_seq_length: int = 512) -> None:
+        """Initialize internal generation state from a prompt.
+
+        This method creates a GenerationState object containing all necessary
+        tensors and metadata for the generation process. It is called by
+        the public `reset()` method and internally by `generate()`.
+
+        Args:
+            prompt: The text prompt to start generation from.
+            max_new_tokens: Maximum number of tokens to generate
+            temperature: Sampling temperature
+            top_k: Top-k sampling parameter
+            device: Target device for tensors
+            max_seq_length: Maximum length of tokenized input.
+
+        Raises:
+            ValueError: If prompt is empty or invalid.
+            RuntimeError: If model is not loaded on a device.
+        """
+        if not prompt or not prompt.strip():
+            raise ValueError('Prompt cannot be empty.')
+
+        inputs = self.tokenizer(prompt,
+                                return_tensors='pt',
+                                truncation=True,
+                                max_length=max_seq_length)
+
+        if not hasattr(self.model, 'device'):
+            raise RuntimeError('Model does not have a device attribute. '
+                               'Ensure model is loaded.')
+
+        inputs = inputs.to(device)
+
+        if max_new_tokens < 1:
+            raise ValueError('`max_new_tokens` must be positive')
+
+        if temperature <= 0:
+            raise ValueError('`temperature` must be positive')
+
+        if top_k < 1:
+            raise ValueError('`top_k` must be positive')
+
+        self._state = GenerationState(
+            input_ids=inputs.input_ids,
+            past_key_values=None,
+            prompt_length=inputs.input_ids.shape[1],
+            generated_count=0,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_k=top_k,
+        )

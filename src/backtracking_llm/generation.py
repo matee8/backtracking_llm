@@ -99,6 +99,8 @@ class Generator:
         self.model = model
         self.tokenizer = tokenizer
 
+        self._state: Optional[GenerationState] = None
+
     def generate(self,
                  prompt: str,
                  operator: Optional[Operator] = None,
@@ -268,6 +270,10 @@ class Generator:
         """
         truncated_ids = input_ids[:, :-backtrack_count]
 
+        if isinstance(past_key_values, Tuple):
+            past_key_values = DynamicCache.from_legacy_cache(
+                past_key_values)  # type: ignore
+
         if past_key_values is None or backtrack_count == 0:
             return truncated_ids, past_key_values
 
@@ -333,4 +339,66 @@ class Generator:
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_k=top_k,
+        )
+
+    def _generate_next_token(self) -> Tuple[int, Tensor, Tensor, int]:
+        """Generate one token and update the generation state.
+
+        This method performs a single forward pass through the model,
+        samples a token according to the current generation parameters,
+        and updates the internal state.
+
+        Returns:
+            Tuple of:
+            - token_id: The generated token's ID in the vocabulary
+            - top_k_logits: Logits for the top-k tokens sampled
+            - top_k_probs: Probabilities for the top-k tokens
+            - chosen_index: Index of the chosen token within top-k
+
+        Raises:
+            RuntimeError: If generation state is not initialized.
+            ValueError: If generation parameters are invalid.
+        """
+        if self._state is None:
+            raise RuntimeError(
+                'Generation state not initialized. Call reset() or '
+                '_initialize_state() first.')
+
+        outputs = self.model(
+            input_ids=self._state.input_ids[:, -1:],
+            past_key_values=self._state.past_key_values,
+            use_cache=True,
+        )
+
+        next_token_logits = outputs.logits[:, -1, :]
+        self._state.past_key_values = outputs.past_key_values
+
+        if self._state.temperature > 0:
+            next_token_logits = next_token_logits / self._state.temperature
+
+        vocab_size = self.model.config.vocab_size
+        effective_top_k = min(self._state.top_k, vocab_size)
+
+        top_k_logits, top_k_indices = torch.topk(next_token_logits,
+                                                 effective_top_k)
+        top_k_probs = torch.nn.functional.softmax(top_k_logits, dim=-1)
+
+        chosen_index = torch.multinomial(top_k_probs, num_samples=1)
+        next_token_id = top_k_indices[0, chosen_index].item()
+
+        device = self._state.device
+        new_token_tensor = torch.tensor([[next_token_id]], device=device)
+        self._state.input_ids = torch.cat([
+            self._state.input_ids,
+            new_token_tensor,
+        ],
+                                          dim=-1)
+
+        self._state.generated_count += 1
+
+        return (
+            int(next_token_id),
+            top_k_logits,
+            top_k_probs,
+            int(chosen_index.item()),
         )

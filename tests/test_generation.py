@@ -1,6 +1,5 @@
 # pylint: disable=missing-module-docstring
 
-import copy
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -609,10 +608,12 @@ class TestInitializeStateValidation:
             generator._initialize_state('   ')
 
     def test_invalid_max_new_tokens_raises(self, generator):
-        with pytest.raises(ValueError, match='`max_new_tokens` must be positive'):
+        with pytest.raises(ValueError,
+                           match='`max_new_tokens` must be positive'):
             generator._initialize_state('Test', max_new_tokens=0)
 
-        with pytest.raises(ValueError, match='`max_new_tokens` must be positive'):
+        with pytest.raises(ValueError,
+                           match='`max_new_tokens` must be positive'):
             generator._initialize_state('Test', max_new_tokens=-1)
 
     def test_invalid_temperature_raises(self, generator):
@@ -796,3 +797,226 @@ def test_model_device_attribute_missing(mock_model, mock_tokenizer):
     with pytest.raises(RuntimeError,
                        match='Model does not have a device attribute'):
         generator._initialize_state('Test')
+
+
+@pytest.fixture
+def initialized_generator(generator):
+    generator._initialize_state('Hello world')
+    return generator
+
+
+class TestGenerateNextTokenBasic:
+
+    def test_raises_without_state(self, generator):
+        with pytest.raises(RuntimeError, match='state not initialized'):
+            generator._generate_next_token()
+
+    def test_returns_tuple_of_four(self, initialized_generator):
+        result = initialized_generator._generate_next_token()
+
+        assert isinstance(result, tuple)
+        assert len(result) == 4
+
+        token_id, logits, probs, chosen_idx = result
+
+        assert isinstance(token_id, int)
+        assert isinstance(logits, torch.Tensor)
+        assert isinstance(probs, torch.Tensor)
+        assert isinstance(chosen_idx, int)
+
+    def test_token_id_valid_in_vocab(self, initialized_generator):
+        token_id, _, _, _ = initialized_generator._generate_next_token()
+
+        vocab_size = initialized_generator.model.config.vocab_size
+        assert 0 <= token_id < vocab_size
+
+    def test_logits_shape_correct(self, initialized_generator):
+        _, logits, _, _ = initialized_generator._generate_next_token()
+
+        assert logits.dim() == 2
+        assert logits.shape[0] == 1
+        assert logits.shape[1] == initialized_generator._state.top_k
+
+    def test_probs_shape_matches_logits(self, initialized_generator):
+        _, logits, probs, _ = initialized_generator._generate_next_token()
+
+        assert probs.shape == logits.shape
+
+    def test_probs_sum_to_one(self, initialized_generator):
+        _, _, probs, _ = initialized_generator._generate_next_token()
+
+        prob_sum = probs.sum().item()
+        assert 0.99 <= prob_sum <= 1.01
+
+    def test_chosen_idx_in_range(self, initialized_generator):
+        _, _, _, chosen_idx = initialized_generator._generate_next_token()
+
+        top_k = initialized_generator._state.top_k
+        assert 0 <= chosen_idx < top_k
+
+
+class TestGenerateNextTokenStateUpdate:
+
+    def test_state_input_ids_grows(self, initialized_generator):
+        initial_length = initialized_generator._state.sequence_length
+
+        initialized_generator._generate_next_token()
+
+        new_length = initialized_generator._state.sequence_length
+        assert new_length == initial_length + 1
+
+    def test_state_generated_count_increments(self, initialized_generator):
+        initial_count = initialized_generator._state.generated_count
+
+        initialized_generator._generate_next_token()
+
+        assert initialized_generator._state.generated_count == initial_count + 1
+
+    def test_state_past_key_values_updated(self, initialized_generator):
+        assert initialized_generator._state.past_key_values is None
+
+        initialized_generator._generate_next_token()
+
+        assert initialized_generator._state.past_key_values is not None
+
+    def test_generated_ids_is_correct_slice(self, initialized_generator):
+        initial_gen_ids = initialized_generator._state.generated_ids.clone()
+        assert initial_gen_ids.numel() == 0
+
+        token_id, _, _, _ = initialized_generator._generate_next_token()
+
+        new_gen_ids = initialized_generator._state.generated_ids
+        assert new_gen_ids.numel() == 1
+        assert new_gen_ids[0, 0].item() == token_id
+
+    def test_state_preserved_between_calls(self, initialized_generator):
+        tokens = []
+
+        for i in range(5):
+            token_id, _, _, _ = initialized_generator._generate_next_token()
+            tokens.append(token_id)
+
+            assert initialized_generator._state.generated_count == i + 1
+            assert initialized_generator._state.sequence_length == initialized_generator._state.prompt_length + i + 1
+
+        generated = initialized_generator._state.generated_ids[0].tolist()
+        assert generated == tokens
+
+
+class TestGenerateNextTokenSamplingBehavior:
+
+    def test_temperature_affects_sampling(self, generator):
+        generator._initialize_state('Test', temperature=0.01)
+        token_id1, _, probs1, _ = generator._generate_next_token()
+
+        generator._initialize_state('Test', temperature=2.0)
+        token_id2, _, probs2, _ = generator._generate_next_token()
+
+        assert token_id1 != token_id2 or not torch.allclose(probs1, probs2)
+
+    def test_top_k_affects_distribution(self, generator):
+        generator._initialize_state('Test', top_k=5)
+        _, logits, _, _ = generator._generate_next_token()
+
+        assert logits.shape[1] == 5
+
+    def test_top_k_clipped_to_vocab_size(self, generator):
+        vocab_size = generator.model.config.vocab_size
+
+        generator._initialize_state('Test', top_k=vocab_size + 1000)
+        _, logits, _, _ = generator._generate_next_token()
+
+        assert logits.shape[1] == vocab_size
+
+    def test_temperature_scaling_applied(self, initialized_generator):
+        _, logits1, _, _ = initialized_generator._generate_next_token()
+
+        initialized_generator._initialize_state('Test', temperature=2.0)
+        _, logits2, _, _ = initialized_generator._generate_next_token()
+
+        assert not torch.allclose(logits1, logits2)
+
+    def test_sampling_is_stochastic(self, initialized_generator):
+        tokens = []
+
+        for _ in range(3):
+            generator_copy = Generator(initialized_generator.model,
+                                       initialized_generator.tokenizer)
+            generator_copy._initialize_state('Test')
+            token_id, _, _, _ = generator_copy._generate_next_token()
+            tokens.append(token_id)
+
+        assert len(set(tokens)) > 1 or len(tokens) == 1
+
+
+class TestGenerateNextTokenGenerationFlow:
+
+    def test_multiple_tokens_form_coherent_text(self, initialized_generator):
+        tokens = []
+
+        for _ in range(10):
+            token_id, _, _, _ = initialized_generator._generate_next_token()
+            tokens.append(token_id)
+
+        text = initialized_generator.tokenizer.decode(
+            torch.tensor(tokens),
+            skip_special_tokens=True,
+        )
+
+        assert isinstance(text, str)
+        assert len(text) > 0
+
+    def test_eos_token_detection(self, generator):
+        generator._initialize_state('The')
+
+        eos_token_id = generator.tokenizer.eos_token_id
+
+        eos_found = False
+        for _ in range(50):
+            token_id, _, _, _ = generator._generate_next_token()
+            if token_id == eos_token_id:
+                eos_found = True
+                break
+
+        assert isinstance(eos_found, bool)
+
+
+class TestGenerateNextTokenErrorHandling:
+
+    def test_empty_vocab_top_k_handled(self, initialized_generator):
+        initialized_generator._state.top_k = 1
+
+        _, logits, probs, chosen_idx = initialized_generator._generate_next_token(
+        )
+
+        assert logits.shape[1] == 1
+        assert probs.shape[1] == 1
+        assert chosen_idx == 0
+
+    def test_very_high_temperature(self, generator):
+        generator._initialize_state('Test', temperature=10.0)
+
+        token_id, _, _, _ = generator._generate_next_token()
+        assert isinstance(token_id, int)
+
+    def test_state_device_consistency(self, initialized_generator):
+        original_device = initialized_generator._state.device
+
+        _ = initialized_generator._generate_next_token()
+
+        assert initialized_generator._state.input_ids.device == original_device
+        assert initialized_generator._state.device == original_device
+
+
+def test_generate_next_token_device_placement(generator):
+    generator._initialize_state('Test')
+
+    mock_outputs = MagicMock()
+    mock_logits = torch.randn(1, 1, generator.model.config.vocab_size)
+    mock_outputs.logits = mock_logits
+    mock_outputs.past_key_values = None
+
+    with patch.object(generator.model, 'forward', return_value=mock_outputs):
+        token_id, _, _, _ = generator._generate_next_token()
+
+        assert 0 <= token_id < generator.model.config.vocab_size

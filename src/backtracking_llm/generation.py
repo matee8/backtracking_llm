@@ -1,6 +1,5 @@
 """Defines the core generation logic with backtracking capabilities."""
 
-import dataclasses
 import logging
 from typing import List, Optional, Tuple
 
@@ -12,63 +11,6 @@ from transformers import (AutoModelForCausalLM, AutoTokenizer, DynamicCache,
 from backtracking_llm.decision import Operator
 
 logger = logging.getLogger(__name__)
-
-
-@dataclasses.dataclass
-class GenerationState:
-    """Type-safe container for generation state.
-
-    Attributes:
-        input_ids: The full token sequence (prompt + generated).
-        past_key_values: KV cache from the model.
-        prompt_length: Length of the original prompt in tokens.
-        generated_count: Number of tokens generated so far.
-        max_new_tokens: Maximum tokens to generate in this run.
-        temperature: Current sampling temperature.
-        top_k: Current top-k value.
-    """
-
-    input_ids: Tensor
-    past_key_values: Optional[DynamicCache] = None
-    prompt_length: int = 0
-    generated_count: int = 0
-    max_new_tokens: int = 100
-    temperature: float = 1.0
-    top_k: int = 50
-
-    def __post_init__(self):
-        """Validate state consistency."""
-        if self.input_ids.dim() not in [1, 2]:
-            raise ValueError(f'input_ids must be 1D or 2D tensor')
-
-        if self.input_ids.dim() == 1:
-            self.input_ids = self.input_ids.unsqueeze(0)
-
-        max_generated = self.input_ids.shape[-1] - self.prompt_length
-        if self.generated_count > max_generated:
-            raise ValueError(
-                f'generated_count ({self.generated_count}) exceeds actual '
-                f'generated tokens ({max_generated})')
-
-    @property
-    def device(self) -> torch.device:
-        """Return the device of the state tensors."""
-        return self.input_ids.device
-
-    @property
-    def batch_size(self) -> int:
-        """Return batch size (currently always 1, but structured for future)."""
-        return self.input_ids.shape[0]
-
-    @property
-    def sequence_length(self) -> int:
-        """Return total sequence length."""
-        return self.input_ids.shape[1]
-
-    @property
-    def generated_ids(self) -> torch.Tensor:
-        """Return only the generated tokens (excluding prompt)."""
-        return self.input_ids[:, self.prompt_length:]
 
 
 class Generator:

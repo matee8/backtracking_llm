@@ -6,7 +6,7 @@ import pytest
 import torch
 from transformers import DynamicCache, PreTrainedTokenizer, PreTrainedModel
 
-from backtracking_llm.generation import Generator
+from backtracking_llm.generation import Generator, GenerationSession
 from backtracking_llm.decision import Operator
 
 # pylint: disable=redefined-outer-name
@@ -45,25 +45,6 @@ def test_generator_init(mock_model, mock_tokenizer):
     assert generator.tokenizer is mock_tokenizer
 
 
-def test_apply_backtracking_ids_only():
-    generator = Generator(Mock(), Mock())
-    input_ids = torch.tensor([[0, 1, 2, 3, 4]])
-    truncated_ids, _ = generator._apply_backtracking(input_ids, None, 2)
-    assert torch.equal(truncated_ids, torch.tensor([[0, 1, 2]]))
-
-
-def test_apply_backtracking_with_cache():
-    generator = Generator(Mock(), Mock())
-    input_ids = torch.tensor([[0, 1, 2, 3, 4]])
-
-    mock_cache = MagicMock(spec=DynamicCache)
-    mock_cache.get_seq_length.return_value = 5
-
-    generator._apply_backtracking(input_ids, mock_cache, 2)
-
-    mock_cache.crop.assert_called_once_with(3)
-
-
 def test_generate_raises_for_invalid_backtrack_every_n(mock_model,
                                                        mock_tokenizer):
     generator = Generator(mock_model, mock_tokenizer)
@@ -79,7 +60,6 @@ def test_generate_stops_at_max_new_tokens(mock_model, mock_tokenizer):
     generator.generate('prompt', max_new_tokens=5, top_k=10)
 
     final_call_args = mock_tokenizer.decode.call_args[0][0]
-    print(final_call_args.shape)
     assert final_call_args.shape[0] == 5
 
 
@@ -98,7 +78,7 @@ def test_generate_stops_at_eos_token(mock_model, mock_tokenizer):
     generator.generate('prompt', max_new_tokens=10, top_k=10)
 
     final_call_args = mock_tokenizer.decode.call_args[0][0]
-    assert final_call_args.shape[0] == 1
+    assert final_call_args.shape[0] == 2
 
 
 def test_generate_uses_kv_cache(mock_model, mock_tokenizer):
@@ -117,6 +97,7 @@ def test_generate_uses_kv_cache(mock_model, mock_tokenizer):
 def test_generate_applies_backtracking(mock_model, mock_tokenizer):
     mock_model.return_value.logits = torch.full((1, 1, 10), -10.0)
     mock_model.return_value.logits[0, 0, 5] = 10.0
+    mock_model.return_value.past_key_values.get_seq_length.return_value = 10
 
     mock_operator = Mock(spec=Operator)
     mock_operator.side_effect = [0, 1, 0, 0, 0]
@@ -124,19 +105,20 @@ def test_generate_applies_backtracking(mock_model, mock_tokenizer):
     generator = Generator(mock_model, mock_tokenizer)
     generator.generate('prompt',
                        operator=mock_operator,
-                       max_new_tokens=3,
+                       max_new_tokens=4,
                        backtrack_every_n=1,
                        top_k=5)
 
     assert mock_operator.call_count == 5
     final_call_args = mock_tokenizer.decode.call_args[0][0]
-    assert final_call_args.shape[0] == 3
+    assert final_call_args.shape[0] == 4
 
 
 def test_generate_discards_token_on_clipped_backtrack(mock_model,
                                                       mock_tokenizer):
     mock_model.return_value.logits = torch.full((1, 1, 10), -10.0)
     mock_model.return_value.logits[0, 0, 5] = 10.0
+    mock_model.return_value.past_key_values.get_seq_length.return_value = 10
 
     mock_operator = Mock(spec=Operator)
     mock_operator.side_effect = [2, 0]
@@ -335,3 +317,126 @@ def test_generate_skips_temperature_scaling_when_zero(mock_topk, mock_model,
 
     actual_logits_passed_to_topk = mock_topk.call_args[0][0]
     assert torch.allclose(actual_logits_passed_to_topk, original_logits)
+
+
+def test_generation_session_exists_and_is_callable():
+    assert callable(GenerationSession)
+
+
+def test_generation_session_backtrack_method(mock_model, mock_tokenizer):
+    mock_model.return_value.past_key_values.get_seq_length.return_value = 10
+    original_logits = torch.tensor([[[0.0, 2.0, 4.0]]])
+    mock_model.return_value.logits = original_logits
+    mock_model.config.vocab_size = 3
+    session = GenerationSession(mock_model,
+                                mock_tokenizer,
+                                prompt='hi',
+                                top_k=10)
+    session.step()
+    session.step()
+
+    assert session._input_ids.shape[1] == 5
+
+    session.backtrack(10)
+
+    assert session._input_ids.shape[1] == 3
+    assert session._generated_token_count == 0
+
+
+def test_generation_session_done_persists_after_backtrack(
+        mock_model, mock_tokenizer):
+    mock_model.return_value.past_key_values.get_seq_length.return_value = 10
+    session = GenerationSession(mock_model,
+                                mock_tokenizer,
+                                prompt='hi',
+                                max_new_tokens=1,
+                                top_k=10)
+
+    session.step(operator=None)
+    assert session.done
+
+    session.backtrack(1)
+    assert not session.done
+
+
+def test_generation_session_raises_after_done(mock_model, mock_tokenizer):
+    session = GenerationSession(mock_model, mock_tokenizer, prompt='hi')
+    session._done = True
+
+    with pytest.raises(RuntimeError, match='done'):
+        session.step()
+
+
+def test_generation_backtrack_returns_on_negative(mock_model, mock_tokenizer,
+                                                  caplog):
+    session = GenerationSession(mock_model, mock_tokenizer, prompt='hi')
+
+    shape_before = session._input_ids.shape
+
+    session.backtrack(-1)
+
+    shape_after = session._input_ids.shape
+
+    assert 'negative' in caplog.text
+    assert shape_before == shape_after
+
+
+def test_generation_backtrack_returns_on_no_tokens(mock_model, mock_tokenizer,
+                                                   caplog):
+    session = GenerationSession(mock_model, mock_tokenizer, prompt='hi')
+
+    shape_before = session._input_ids.shape
+
+    session.backtrack(1)
+
+    shape_after = session._input_ids.shape
+
+    assert 'No tokens' in caplog.text
+    assert shape_before == shape_after
+
+
+def test_generation_backtrack_returns_on_0_tokens(mock_model, mock_tokenizer,
+                                                  caplog):
+    session = GenerationSession(mock_model,
+                                mock_tokenizer,
+                                prompt='hi',
+                                top_k=10)
+    session.step()
+
+    shape_before = session._input_ids.shape
+
+    session.backtrack(0)
+
+    shape_after = session._input_ids.shape
+
+    assert '0 tokens' in caplog.text
+    assert shape_before == shape_after
+
+
+def test_generation_backtrack_rolls_back_kv_cache(mock_model, mock_tokenizer):
+    session = GenerationSession(mock_model, mock_tokenizer, prompt='hi')
+    input_ids = torch.tensor([[0, 1, 2, 3, 4]])
+    mock_cache = MagicMock(spec=DynamicCache)
+    mock_cache.get_seq_length.return_value = 5
+
+    session._input_ids = input_ids
+    session._past_key_values = mock_cache
+
+    session.backtrack(2)
+
+    mock_cache.crop.assert_called_once_with(3)
+
+
+def test_generation_backtrack_empties_kv_cache(mock_model, mock_tokenizer):
+    session = GenerationSession(mock_model, mock_tokenizer, prompt='')
+    input_ids = torch.tensor([[0, 1, 2, 3, 4]])
+    mock_cache = MagicMock(spec=DynamicCache)
+    mock_cache.get_seq_length.return_value = 5
+
+    session._input_ids = input_ids
+    session._past_key_values = mock_cache
+    session.prompt_length = 0
+
+    session.backtrack(5)
+
+    assert session._past_key_values is None

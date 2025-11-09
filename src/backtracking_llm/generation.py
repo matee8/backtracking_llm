@@ -1,7 +1,8 @@
 """Defines the core generation logic with backtracking capabilities."""
 
+import dataclasses
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import torch
 from torch import Tensor
@@ -11,6 +12,227 @@ from transformers import (AutoModelForCausalLM, AutoTokenizer, DynamicCache,
 from backtracking_llm.decision import Operator
 
 logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass
+class StepResult:
+    """Result of a single generation step.
+
+    Attributes:
+        token_id: The generated token ID.
+        backtrack_count: Number of tokens to backtrack if requested.
+    """
+    token_id: int
+    backtrack_count: int = 0
+
+
+class GenerationSession:
+    """Stateful, non-iterator session for controlled text generation.
+
+    This class provides explicit step-by-step control over the generation
+    process, including fine-grained backtracking capabilities. It is designed
+    for RL training and research scenarios where the generation state must be
+    inspectable and mutable.
+
+    Attributes:
+        model: The model used for generation.
+        tokenizer: The tokenizer for encoding/decoding.
+        prompt: The initial prompt string.
+        prompt_length: Length of the tokenized prompt (read-only).
+        token_ids: The full sequence of generated token IDs (read-only
+            snapshot).
+        done: Whether generation has terminated (EOS, max tokens, or stop
+            sequence).
+        max_new_tokens: Maximum tokens to generate (read-only).
+        stop_sequences: List of strings that terminate generation (read-only).
+    """
+
+    def __init__(self,
+                 model: PreTrainedModel,
+                 tokenizer: PreTrainedTokenizer,
+                 prompt: str,
+                 backtrack_every_n: int = 1,
+                 max_new_tokens: int = 100,
+                 temperature: float = 1.0,
+                 top_k: int = 50,
+                 stop_sequences: Optional[List[str]] = None) -> None:
+        """Initialize a generation session.
+
+        Args:
+            model: Pre-trained causal LM.
+            tokenizer: Corresponding tokenizer.
+            prompt: Initial text to start generation.
+            backtrack_every_n: The frequency (in tokens) at which the decision
+                `operator` is called. A value of 1 means it's called for every
+                new token. Must be a positive integer.
+            max_new_tokens: Maximum new tokens to generate.
+            temperature: Sampling temperature.
+            top_k: Top-k filtering parameter.
+            stop_sequences: Strings that trigger termination.
+        Raises:
+            ValueError: If `backtrack_every_n` is not a positive integer.
+        """
+        if backtrack_every_n < 1:
+            raise ValueError('`backtrack_every_n` must be a positive integer')
+
+        self.model = model
+        self.tokenizer = tokenizer
+        self.prompt = prompt
+        self.backtrack_every_n = backtrack_every_n
+        self.max_new_tokens = max_new_tokens
+        self.temperature = temperature
+        self.top_k = top_k
+        self.stop_sequences = stop_sequences or []
+
+        device = model.device
+        inputs = tokenizer(prompt, return_tensors='pt').to(device)
+        self._input_ids: Tensor = inputs.input_ids
+        self.prompt_length = self._input_ids.shape[1]
+
+        self._past_key_values: Optional[DynamicCache] = None
+        self._generated_token_count = 0
+        self._done = False
+
+        self._current_output: Optional[str] = None
+
+        logger.info('GenerationSession initialized with prompt: "%s..."',
+                    prompt[:50])
+
+    @property
+    def done(self) -> bool:
+        """Whether generation has terminated."""
+        return self._done
+
+    def step(self, operator: Optional[Operator] = None) -> StepResult:
+        """Execute one generation step.
+
+        Args:
+            operator: Optional decision function to evaluate after generation.
+
+        Returns:
+            StepResult with token information and backtracking request.
+
+        Raises:
+            RuntimeError: If called after generation is done.
+        """
+        if self._done:
+            raise RuntimeError('Cannot step: generation is already done.')
+
+        outputs = self.model(
+            input_ids=(self._input_ids[:, -1:]
+                       if self._generated_token_count > 0 else self._input_ids),
+            past_key_values=self._past_key_values,
+            use_cache=True)
+        next_token_logits = outputs.logits[:, -1, :]
+        self._past_key_values = outputs.past_key_values
+
+        if self.temperature > 0:
+            next_token_logits = next_token_logits / self.temperature
+
+        vocab_size = self.model.config.vocab_size
+        top_k = min(self.top_k, vocab_size)
+
+        top_k_logits, top_k_indices = torch.topk(next_token_logits, top_k)
+        top_k_probs = F.softmax(top_k_logits, dim=-1)
+
+        chosen_index = torch.multinomial(top_k_probs, num_samples=1)
+        next_token_id = top_k_indices[0, chosen_index].item()
+        logger.debug('Sampled token ID: %d', next_token_id)
+
+        backtrack_count = 0
+        if (operator is not None and
+            (self._generated_token_count + 1) % self.backtrack_every_n == 0):
+            token_str = self.tokenizer.decode(next_token_id)
+            backtrack_count = operator(top_k_logits.squeeze(),
+                                       top_k_probs.squeeze(),
+                                       int(chosen_index.item()), token_str)
+            if backtrack_count > 0:
+                logger.info('Operator requested backtrack of %d tokens.',
+                            backtrack_count)
+
+        self._input_ids = torch.cat([
+            self._input_ids,
+            torch.tensor([[next_token_id]], device=self.model.device)
+        ],
+                                    dim=-1)
+        self._generated_token_count += 1
+
+        self._done = self._should_stop()
+        if self._done:
+            logger.info('Generation finished. Total tokens generated: %d.',
+                        self._generated_token_count)
+
+        return StepResult(token_id=int(next_token_id),
+                          backtrack_count=backtrack_count)
+
+    def backtrack(self, n_tokens: int) -> None:
+        """Remove the last n tokens from the generation.
+
+        Args:
+            n_tokens: Number of tokens to remove. Clipped to prompt length.
+
+        Raises:
+            RuntimeError: If n_tokens is negative.
+        """
+        if n_tokens < 0:
+            logger.warning('Cannot backtrack negative tokens.')
+            return
+
+        max_backtrack = self._input_ids.shape[1] - self.prompt_length
+        if max_backtrack <= 0:
+            logger.warning('No tokens to backtrack (max_backtrack=%d)',
+                           max_backtrack)
+            return
+
+        n_tokens = min(n_tokens, max_backtrack)
+        if n_tokens == 0:
+            logger.warning('Backtrack of 0 tokens requested, ignoring')
+            return
+
+        logger.info('Backtracking %d tokens', n_tokens)
+
+        self._input_ids = self._input_ids[:, :-n_tokens]
+
+        if self._past_key_values is not None:
+            current_length = self._past_key_values.get_seq_length()
+            new_length = current_length - n_tokens
+            if new_length > 0:
+                self._past_key_values.crop(new_length)
+            else:
+                self._past_key_values = None
+
+        self._generated_token_count -= n_tokens
+        self._done = False
+        logger.debug('Backtrack complete. New sequence length: %d',
+                     self._input_ids.shape[1])
+
+    def get_decoded_text(self) -> str:
+        """Get the currently generated text (excluding prompt)."""
+        newly_generated_ids = self._input_ids[0, self.prompt_length:]
+        return self.tokenizer.decode(newly_generated_ids,
+                                     skip_special_tokens=True)
+
+    def _should_stop(self) -> bool:
+        """Check if generation should stop based on stop sequences or limits."""
+        if self._generated_token_count >= self.max_new_tokens:
+            logger.debug('Stopping: max_new_tokens reached')
+            return True
+
+        if self._input_ids[0, -1].item() == self.tokenizer.eos_token_id:
+            logger.debug('Stopping: EOS token detected')
+            return True
+
+        if self.stop_sequences:
+            newly_generated_ids = self._input_ids[0, self.prompt_length:]
+            current_output = self.tokenizer.decode(newly_generated_ids,
+                                                   skip_special_tokens=True)
+            if (any(
+                    current_output.endswith(seq)
+                    for seq in self.stop_sequences)):
+                logger.debug('Stopping: stop sequence detected')
+                return True
+
+        return False
 
 
 class Generator:
@@ -72,97 +294,21 @@ class Generator:
         Raises:
             ValueError: If `backtrack_every_n` is not a positive integer.
         """
-        if backtrack_every_n < 1:
-            raise ValueError('`backtrack_every_n` must be a positive integer')
+        session = GenerationSession(model=self.model,
+                                    tokenizer=self.tokenizer,
+                                    prompt=prompt,
+                                    max_new_tokens=max_new_tokens,
+                                    temperature=temperature,
+                                    top_k=top_k,
+                                    stop_sequences=stop_sequences,
+                                    backtrack_every_n=backtrack_every_n)
 
-        vocab_size = self.model.config.vocab_size
-        top_k = min(top_k, vocab_size)
+        while not session.done:
+            result = session.step(operator)
+            if result.backtrack_count > 0:
+                session.backtrack(result.backtrack_count)
 
-        device = self.model.device
-        inputs = self.tokenizer(prompt, return_tensors='pt').to(device)
-        input_ids: Tensor = inputs.input_ids
-        model_inputs = input_ids
-        prompt_length = input_ids.shape[1]
-
-        past_key_values: Optional[DynamicCache] = None
-        generated_token_count = 0
-
-        logger.info("Starting text generation from prompt: '%s...'.",
-                    prompt[:50])
-        context_manager = (torch.inference_mode() if hasattr(
-            torch, 'inference_mode') else torch.no_grad())
-
-        with context_manager:
-            while generated_token_count < max_new_tokens:
-                logger.debug('Generation step %d.', generated_token_count + 1)
-                outputs = self.model(input_ids=model_inputs,
-                                     past_key_values=past_key_values,
-                                     use_cache=True)
-                next_token_logits = outputs.logits[:, -1, :]
-                past_key_values = outputs.past_key_values
-
-                if temperature > 0:
-                    next_token_logits = next_token_logits / temperature
-
-                top_k_logits, top_k_indices = torch.topk(
-                    next_token_logits, top_k)
-                top_k_probs = F.softmax(top_k_logits, dim=-1)
-
-                chosen_index = torch.multinomial(top_k_probs, num_samples=1)
-                next_token_id = top_k_indices[0, chosen_index].item()
-                logger.debug('Sampled token ID: %d', next_token_id)
-
-                if next_token_id == self.tokenizer.eos_token_id:
-                    logger.info('EOS token detected. Stopping generation.')
-                    break
-
-                backtrack_count = 0
-                if (operator is not None and
-                    (generated_token_count + 1) % backtrack_every_n == 0):
-                    token_str = self.tokenizer.decode(next_token_id)
-                    backtrack_count = operator(top_k_logits.squeeze(),
-                                               top_k_probs.squeeze(),
-                                               int(chosen_index.item()),
-                                               token_str)
-
-                if backtrack_count > 0:
-                    logger.info('Operator requested backtrack of %d tokens.',
-                                backtrack_count)
-                    max_backtrack = input_ids.shape[1] - prompt_length
-                    backtrack_count = min(backtrack_count, max_backtrack)
-
-                    if backtrack_count > 0:
-                        input_ids, past_key_values = self._apply_backtracking(
-                            input_ids, past_key_values, backtrack_count)
-                        generated_token_count -= backtrack_count
-                    else:
-                        logger.debug('Backtrack clipped to 0. Discarding token '
-                                     'and continuing.')
-                    continue
-
-                input_ids = torch.cat(
-                    [input_ids,
-                     torch.tensor([[next_token_id]], device=device)],
-                    dim=-1)
-                model_inputs = input_ids[:, -1:]
-
-                generated_token_count += 1
-
-                if stop_sequences:
-                    current_output = self.tokenizer.decode(
-                        input_ids[0, prompt_length:], skip_special_tokens=True)
-                    if (any(
-                            current_output.endswith(seq)
-                            for seq in stop_sequences)):
-                        logger.info('Stopping generation due to detected stop '
-                                    'sequence.')
-                        break
-
-        logger.info('Generation finished. Total tokens generated: %d.',
-                    generated_token_count)
-        newly_generated_ids = input_ids[0, prompt_length:]
-        return self.tokenizer.decode(newly_generated_ids,
-                                     skip_special_tokens=True)
+        return session.get_decoded_text()
 
     def __repr__(self) -> str:
         """Returns a developer-friendly representation of the Generator."""
@@ -194,27 +340,3 @@ class Generator:
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
         return cls(model, tokenizer)
-
-    def _apply_backtracking(
-            self, input_ids: Tensor, past_key_values: Optional[DynamicCache],
-            backtrack_count: int) -> Tuple[Tensor, Optional[DynamicCache]]:
-        """Truncates the input tensor and past key-value cache.
-
-        Args:
-            input_ids: The tensor of token IDs for the entire sequence.
-            past_key_values: The model's KV cache.
-            backtrack_count: The number of tokens to remove.
-
-        Returns:
-            A tuple containing the truncated `input_ids` and `past_key_values`.
-        """
-        truncated_ids = input_ids[:, :-backtrack_count]
-
-        if past_key_values is None or backtrack_count == 0:
-            return truncated_ids, past_key_values
-
-        current_length = past_key_values.get_seq_length()
-        new_length = current_length - backtrack_count
-        past_key_values.crop(new_length)
-
-        return truncated_ids, past_key_values

@@ -12,6 +12,7 @@ from backtracking_llm.rl.config import EnvConfig
 
 # pylint: disable=protected-access
 # pylint: disable=missing-class-docstring
+# pylint: disable=missing-function-docstring
 # pylint: disable=redefined-outer-name
 # pylint: disable=unused-argument
 

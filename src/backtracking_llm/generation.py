@@ -108,8 +108,12 @@ class GenerationSession:
         return self._done
 
     @property
-    def token_ids() -> Tensor:
+    def token_ids(self) -> Tensor:
         return self._input_ids
+
+    @property
+    def generated_token_count(self) -> int:
+        return self._generated_token_count
 
     def step(self) -> StepResult:
         """Execute one generation step.

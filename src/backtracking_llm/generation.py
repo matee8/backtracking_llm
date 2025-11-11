@@ -51,6 +51,7 @@ class GenerationSession:
                  model: PreTrainedModel,
                  tokenizer: PreTrainedTokenizer,
                  prompt: str,
+                 operator: Optional[Operator] = None,
                  backtrack_every_n: int = 1,
                  max_new_tokens: int = 100,
                  temperature: float = 1.0,
@@ -62,6 +63,7 @@ class GenerationSession:
             model: Pre-trained causal LM.
             tokenizer: Corresponding tokenizer.
             prompt: Initial text to start generation.
+            operator: Optional decision function to evaluate after generation.
             backtrack_every_n: The frequency (in tokens) at which the decision
                 `operator` is called. A value of 1 means it's called for every
                 new token. Must be a positive integer.
@@ -78,6 +80,7 @@ class GenerationSession:
         self.model = model
         self.tokenizer = tokenizer
         self.prompt = prompt
+        self.operator = operator
         self.backtrack_every_n = backtrack_every_n
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
@@ -103,11 +106,8 @@ class GenerationSession:
         """Whether generation has terminated."""
         return self._done
 
-    def step(self, operator: Optional[Operator] = None) -> StepResult:
+    def step(self) -> StepResult:
         """Execute one generation step.
-
-        Args:
-            operator: Optional decision function to evaluate after generation.
 
         Returns:
             StepResult with token information and backtracking request.
@@ -140,12 +140,12 @@ class GenerationSession:
         logger.debug('Sampled token ID: %d', next_token_id)
 
         backtrack_count = 0
-        if (operator is not None and
+        if (self.operator is not None and
             (self._generated_token_count + 1) % self.backtrack_every_n == 0):
             token_str = self.tokenizer.decode(next_token_id)
-            backtrack_count = operator(top_k_logits.squeeze(),
-                                       top_k_probs.squeeze(),
-                                       int(chosen_index.item()), token_str)
+            backtrack_count = self.operator(top_k_logits.squeeze(),
+                                            top_k_probs.squeeze(),
+                                            int(chosen_index.item()), token_str)
             if backtrack_count > 0:
                 logger.info('Operator requested backtrack of %d tokens.',
                             backtrack_count)
@@ -203,6 +203,10 @@ class GenerationSession:
 
         self._generated_token_count -= n_tokens
         self._done = False
+
+        if self.operator is not None:
+            self.operator.backtrack(n_tokens)
+
         logger.debug('Backtrack complete. New sequence length: %d',
                      self._input_ids.shape[1])
 
@@ -297,6 +301,7 @@ class Generator:
         session = GenerationSession(model=self.model,
                                     tokenizer=self.tokenizer,
                                     prompt=prompt,
+                                    operator=operator,
                                     max_new_tokens=max_new_tokens,
                                     temperature=temperature,
                                     top_k=top_k,
@@ -304,7 +309,7 @@ class Generator:
                                     backtrack_every_n=backtrack_every_n)
 
         while not session.done:
-            result = session.step(operator)
+            result = session.step()
             if result.backtrack_count > 0:
                 session.backtrack(result.backtrack_count)
 

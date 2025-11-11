@@ -4,12 +4,15 @@ import pytest
 import torch
 from torch import Tensor
 
-from backtracking_llm.decision import (EntropyThreshold, LogitThreshold,
-                                       NGramOverlap, Never, ProbabilityDrop,
-                                       ProbabilityMargin, ProbabilityThreshold,
-                                       ProbabilityTrend, Repetition)
+from backtracking_llm.decision import (Operator, EntropyThreshold,
+                                       LogitThreshold, NGramOverlap, Never,
+                                       ProbabilityDrop, ProbabilityMargin,
+                                       ProbabilityThreshold, ProbabilityTrend,
+                                       Repetition)
 
 # pylint: disable=redefined-outer-name
+# pylint: disable=missing-class-docstring
+# pylint: disable=protected-access
 
 
 @pytest.fixture
@@ -470,3 +473,96 @@ class TestDunderMethods:
         assert len(operator_set) == 2
         assert op_a in operator_set
         assert op_c_different in operator_set
+
+
+def test_operator_protocol_has_backtrack_method():
+    assert hasattr(Operator, 'backtrack')
+
+
+class TestProbabilityDropBacktrack:
+
+    def test_backtrack_resets_last_probability(self):
+        op = ProbabilityDrop(max_drop=0.5)
+        logits = torch.tensor([1.0, 2.0, 3.0, 4.0])
+        probs = torch.tensor([0.1, 0.2, 0.3, 0.4])
+
+        op(logits, probs, 3, 'test')
+        assert (op._last_probability is not None and torch.equal(
+            torch.Tensor([op._last_probability]), torch.Tensor([0.4])))
+
+        op.backtrack(1)
+        assert op._last_probability is None
+
+
+class TestProbabilityTrendBacktrack:
+
+    def test_backtrack_removes_from_history(self):
+        op = ProbabilityTrend(window_size=5)
+        logits = torch.tensor([1.0, 2.0, 3.0, 4.0])
+        probs = torch.tensor([0.1, 0.2, 0.3, 0.4])
+
+        op(logits, probs, 0, 'a')
+        op(logits, probs, 0, 'b')
+        op(logits, probs, 0, 'c')
+        assert len(op._history) == 3
+
+        op.backtrack(2)
+        assert len(op._history) == 1
+
+        op.backtrack(1)
+        assert len(op._history) == 0
+
+        op.backtrack(10)
+        assert len(op._history) == 0
+
+
+class TestRepetitionBacktrack:
+
+    def test_backtrack_resets_repeat_state(self):
+
+        op = Repetition(max_repetitions=3)
+        logits = torch.tensor([1.0, 2.0, 3.0, 4.0])
+        probs = torch.tensor([0.1, 0.2, 0.3, 0.4])
+
+        op(logits, probs, 0, 'token')
+        op(logits, probs, 0, 'token')
+        assert op._repeat_count == 2
+        assert op._last_token == 'token'
+
+        op.backtrack(1)
+        assert op._repeat_count == 0
+        assert op._last_token is None
+
+
+class TestNGramOverlapBacktrack:
+
+    def test_backtrack_removes_ngrams(self):
+        op = NGramOverlap(ngram_size=3, backtrack_count=1)
+        logits = torch.tensor([1.0, 2.0, 3.0, 4.0])
+        probs = torch.tensor([0.1, 0.2, 0.3, 0.4])
+
+        op(logits, probs, 0, 'a')
+        op(logits, probs, 0, 'b')
+        op(logits, probs, 0, 'c')
+
+        assert len(op._seen_ngrams) == 1
+
+        op.backtrack(1)
+
+        assert len(op._window) == 2
+        assert len(op._seen_ngrams) == 0
+
+
+@pytest.mark.parametrize('operator', [
+    EntropyThreshold,
+    LogitThreshold,
+    Never,
+    ProbabilityMargin,
+    ProbabilityThreshold,
+])
+def test_stateless_operator_backtrack(operator, base_logits, base_probabilities,
+                                      base_position, base_token):
+    op = operator()
+    op(base_logits, base_probabilities, base_position, base_token)
+
+    assert op.backtrack(2) is None

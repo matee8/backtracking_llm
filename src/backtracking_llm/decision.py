@@ -38,6 +38,17 @@ class Operator(Protocol):
         """
         ...
 
+    def backtrack(self, n_token: int) -> None:
+        """Called when tokens are removed from the generation.
+
+        Operators with internal state should revert their state as if
+        the last n_tokens were never generated. Stateless operators
+        can leave this method empty or not implement it at all.
+
+        Args:
+            n_tokens: Number of tokens removed from the end.
+        """
+
 
 class Never:
     """A simple operator that never backtracks.
@@ -49,6 +60,9 @@ class Never:
                  token: str) -> int:
         """Always returns 0, indicating no backtracking should occur."""
         return 0
+
+    def backtrack(self, n_tokens: int) -> None:
+        pass
 
 
 class ProbabilityThreshold:
@@ -101,6 +115,9 @@ class ProbabilityThreshold:
             return self.backtrack_count
 
         return 0
+
+    def backtrack(self, n_tokens: int) -> None:
+        pass
 
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""
@@ -167,6 +184,9 @@ class EntropyThreshold:
             return self.backtrack_count
 
         return 0
+
+    def backtrack(self, n_tokens: int) -> None:
+        pass
 
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""
@@ -241,6 +261,9 @@ class ProbabilityMargin:
             return self.backtrack_count
 
         return 0
+
+    def backtrack(self, n_tokens: int) -> None:
+        pass
 
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""
@@ -319,6 +342,10 @@ class ProbabilityDrop:
         self._last_probability = current_probability
 
         return self.backtrack_count if backtrack else 0
+
+    def backtrack(self, n_tokens: int) -> None:
+        if n_tokens > 0:
+            self._last_probability = None
 
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""
@@ -413,6 +440,12 @@ class ProbabilityTrend:
 
         return self.backtrack_count if backtrack else 0
 
+    def backtrack(self, n_tokens: int) -> None:
+        """Remove last n entries from history."""
+        for _ in range(min(n_tokens, len(self._history))):
+            if self._history:
+                self._history.pop()
+
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""
         return (f'ProbabilityTrend(window_size={self.window_size!r}, '
@@ -482,6 +515,12 @@ class Repetition:
 
         return 0
 
+    def backtrack(self, n_tokens: int) -> None:
+        """Reset state on backtrack."""
+        if n_tokens > 0:
+            self._repeat_count = 0
+            self._last_token = None
+
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""
         return (f'Repetition(max_repetitions={self.max_repetitions!r})')
@@ -550,6 +589,20 @@ class NGramOverlap:
             self._seen_ngrams.add(current_ngram)
             return 0
 
+    def backtrack(self, n_tokens: int) -> None:
+        """Remove tokens from window and ngrams."""
+        for _ in range(min(n_tokens, len(self._window))):
+            if self._window:
+                self._window.pop()
+
+            self._seen_ngrams.clear()
+            if len(self._window) == self.ngram_size:
+                window_list = list(self._window)
+                for i in range(len(window_list), self.ngram_size - 1, -1):
+                    ngram = tuple(window_list[max(0, i - self.ngram_size):i])
+                    if len(ngram) == self.ngram_size:
+                        self._seen_ngrams.add(ngram)
+
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""
         return (f'NGramOverlap(ngram_size={self.ngram_size!r}, '
@@ -611,6 +664,9 @@ class LogitThreshold:
             return self.backtrack_count
 
         return 0
+
+    def backtrack(self, n_tokens: int) -> None:
+        pass
 
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""

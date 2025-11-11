@@ -352,7 +352,7 @@ def test_generation_session_done_persists_after_backtrack(
                                 max_new_tokens=1,
                                 top_k=10)
 
-    session.step(operator=None)
+    session.step()
     assert session.done
 
     session.backtrack(1)

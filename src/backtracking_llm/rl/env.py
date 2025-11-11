@@ -176,6 +176,19 @@ class BacktrackingEnv(Env):
         return observation
 
     def _compute_repetition_penalty(self) -> float:
+        """Computes a repetition penalty based on the uniqueness of recent
+        tokens.
+
+        The repetition penalty is calculated by comparing the number of unique
+        tokens in the most recent 5 generated tokens against the total number of
+        recent tokens. A higher penalty indicates more repetition in the recent
+        output.
+
+        Returns:
+            The repetition penalty value between 0.0 (no repetition) and 1.0
+                (complete repetition). Returns 0.0 if there's no session or if
+                there aren't enough tokens to compute the penalty.
+        """
         if self.session is None or self.session.generated_token_count < 2:
             return 0.0
 

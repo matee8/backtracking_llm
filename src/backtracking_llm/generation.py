@@ -23,7 +23,8 @@ class StepResult:
         backtrack_count: Number of tokens to backtrack if requested.
     """
     token_id: int
-    backtrack_count: int = 0
+    backtrack_count: int
+    probabilities: Tensor
 
 
 class GenerationSession:
@@ -106,6 +107,10 @@ class GenerationSession:
         """Whether generation has terminated."""
         return self._done
 
+    @property
+    def token_ids() -> Tensor:
+        return self._input_ids
+
     def step(self) -> StepResult:
         """Execute one generation step.
 
@@ -163,6 +168,7 @@ class GenerationSession:
                         self._generated_token_count)
 
         return StepResult(token_id=int(next_token_id),
+                          probabilities=top_k_probs.squeeze(),
                           backtrack_count=backtrack_count)
 
     def backtrack(self, n_tokens: int) -> None:

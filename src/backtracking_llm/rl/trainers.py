@@ -1,0 +1,88 @@
+"""Provides the main orchestrator for the RL training pipeline."""
+
+import logging
+
+from stable_baselines3 import PPO
+from stable_baselines3.common import env_checker
+
+from backtracking_llm.generation import Generator, GenerationSession
+from backtracking_llm.rl.config import RLConfig
+from backtracking_llm.rl.data import PromptProvider
+from backtracking_llm.rl.env import BacktrackingEnv
+from backtracking_llm.rl.judges import Judge, OpenAIJudge
+
+logger = logging.getLogger(__name__)
+
+
+class RLTrainer:
+    """Orchestrates the end-to-end reinforcement learning training process.
+
+    This class handles the setup of all components required for training,
+    including the model generator, the scoring judge, the Gym environment,
+    and the RL agent. It then manages the training loop and saves the
+    resulting policy.
+    """
+
+    def __init__(self, config: RLConfig) -> None:
+        """Initializes the RLTrainer.
+
+        Args:
+            config: The main configuration object for the entire RL run.
+        """
+        self.config = config
+        self.generator = Generator.from_pretrained(config.model_name_or_path)
+        self.generator.model.to(config.device)  # type: ignore
+        self.judge: Judge = OpenAIJudge(config.judge)
+
+    def train(self, prompt_provider: PromptProvider) -> None:
+        """Executes the full RL training pipeline.
+
+        Args:
+            prompt_provider: A provider that supplies prompts for each
+                training episode.
+        """
+        logger.info('Starting RL Training Pipeline for model: %s.',
+                    self.config.model_name_or_path)
+
+        def session_factory() -> GenerationSession:
+            """Creates a new GenerationSession for each episode."""
+            prompt = prompt_provider.get_prompt()
+            return GenerationSession(
+                model=self.generator.model,
+                tokenizer=self.generator.tokenizer,
+                prompt=prompt,
+                max_new_tokens=self.config.env.max_seq_length)
+
+        env = BacktrackingEnv(session_factory=session_factory,
+                              judge=self.judge,
+                              config=self.config.env)
+
+        logger.info('Verifying environment compatibility...')
+        env_checker.check_env(env)
+        logger.info('Environment check passed.')
+
+        agent = PPO(
+            policy=self.config.training.policy_type,
+            env=env,
+            learning_rate=self.config.training.learning_rate,
+            n_steps=self.config.training.n_steps,
+            batch_size=self.config.training.batch_size,
+            n_epochs=self.config.training.n_epochs,
+            gamma=self.config.training.gamma,
+            seed=self.config.training.seed,
+            device=self.config.device,
+            verbose=1,
+        )
+
+        logger.info('Starting agent training for %d timesteps...',
+                    self.config.training.total_timesteps)
+        agent.learn(total_timesteps=self.config.training.total_timesteps,
+                    progress_bar=True)
+
+        output_dir = self.config.output_dir
+        output_dir.mkdir(parents=True, exist_ok=True)
+        model_path = output_dir / 'policy.zip'
+        agent.save(model_path)
+
+        logger.info('RL Training Pipeline Finished.')
+        logger.info('Trained policy saved to: %s', model_path)

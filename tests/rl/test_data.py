@@ -8,6 +8,7 @@ from backtracking_llm.rl.data import PromptProvider, TextFilePromptProvider
 
 # pylint: disable=redefined-outer-name
 
+
 @pytest.fixture
 def prompt_file(tmp_path: Path) -> Path:
 

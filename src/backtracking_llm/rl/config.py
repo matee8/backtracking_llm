@@ -29,7 +29,6 @@ class JudgeConfig:
 
     def __post_init__(self):
         """Validate configuration."""
-        print('asd')
         if self.model is None:
             raise ValueError('`model` cannot be None')
         self.model = str(self.model).strip()

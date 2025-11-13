@@ -17,6 +17,7 @@ from backtracking_llm.rl.operators import RlPolicyOperator
 # pylint: disable=unused-argument
 # pylint: disable=protected-access
 
+
 class DummyBacktrackEnv(Env):
 
     def __init__(self, max_backtrack: int = 5):

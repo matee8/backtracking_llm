@@ -129,8 +129,9 @@ class BacktrackingEnv(Env):
             generated_text = self.session.get_decoded_text()
             if not generated_text or not generated_text.strip():
                 reward = 0.0
-                logger.info('Episode end: empty text produced, penalized '
-                            'with score %.2f', reward)
+                logger.info(
+                    'Episode end: empty text produced, penalized '
+                    'with score %.2f', reward)
             else:
                 reward = float(self.judge.score(generated_text))
                 logger.info('Episode end: scored %.2f', reward)

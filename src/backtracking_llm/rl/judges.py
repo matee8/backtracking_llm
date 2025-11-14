@@ -104,8 +104,7 @@ class OpenAIJudge:
                 'role': 'user',
                 'content': prompt
             }],
-            temperature=0.0,
-            max_tokens=10)
+            temperature=0.0)
 
         content = response.choices[0].message.content
         return self._parse_score(content)

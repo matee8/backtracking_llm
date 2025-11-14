@@ -89,7 +89,7 @@ class OpenAIJudge:
         if len(text) == 0 or len(text.strip()) == 0:
             logger.warning(
                 'Empty text provided to judge, returning minimum score.')
-            return 1.0
+            return 0.0
 
         prompt = self._prompt_template.format(text=text)
 

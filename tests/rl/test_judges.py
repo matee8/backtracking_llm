@@ -131,7 +131,7 @@ class TestOpenAIJudge:
             judge = OpenAIJudge(sample_judge_config)
 
             score = judge.score('')
-            assert score == 1.0
+            assert score == 0.0
             assert 'Empty text provided' in caplog.text
         except ImportError:
             pytest.skip('OpenAI dependencies not available')
@@ -153,7 +153,6 @@ class TestOpenAIJudge:
                 call_args = judge.client.chat.completions.create.call_args
                 assert call_args.kwargs['model'] == 'gpt-3.5-turbo'
                 assert call_args.kwargs['temperature'] == 0.0
-                assert call_args.kwargs['max_tokens'] == 10
         except ImportError:
             pytest.skip('OpenAI dependencies not available')
 

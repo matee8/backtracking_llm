@@ -32,8 +32,8 @@ def mock_prompt_provider() -> mock.Mock:
     return provider
 
 
-@mock.patch('backtracking_llm.rl.trainer.Generator.from_pretrained')
-@mock.patch('backtracking_llm.rl.trainer.OpenAIJudge')
+@mock.patch('backtracking_llm.rl.trainers.Generator.from_pretrained')
+@mock.patch('backtracking_llm.rl.trainers.OpenAIJudge')
 def test_trainer_initialization(mock_judge_cls, mock_generator_cls,
                                 mock_config):
     mock_generator_instance = mock.Mock()
@@ -47,12 +47,12 @@ def test_trainer_initialization(mock_judge_cls, mock_generator_cls,
     assert trainer.config == mock_config
 
 
-@mock.patch('backtracking_llm.rl.trainer.Generator.from_pretrained')
-@mock.patch('backtracking_llm.rl.trainer.OpenAIJudge')
-@mock.patch('backtracking_llm.rl.trainer.BacktrackingEnv')
-@mock.patch('backtracking_llm.rl.trainer.check_env')
-@mock.patch('backtracking_llm.rl.trainer.PPO')
-@mock.patch('backtracking_llm.rl.trainer.GenerationSession')
+@mock.patch('backtracking_llm.rl.trainers.Generator.from_pretrained')
+@mock.patch('backtracking_llm.rl.trainers.OpenAIJudge')
+@mock.patch('backtracking_llm.rl.trainers.BacktrackingEnv')
+@mock.patch('backtracking_llm.rl.trainers.env_checker')
+@mock.patch('backtracking_llm.rl.trainers.PPO')
+@mock.patch('backtracking_llm.rl.trainers.GenerationSession')
 def test_train_method_orchestration(
     mock_session_cls,
     mock_ppo_cls,
@@ -74,7 +74,7 @@ def test_train_method_orchestration(
     assert 'session_factory' in env_kwargs
     assert env_kwargs['judge'] is trainer.judge
     assert env_kwargs['config'] == mock_config.env
-    mock_check_env.assert_called_once_with(mock_env_instance)
+    mock_check_env.check_env.assert_called_once_with(mock_env_instance)
 
     session_factory = env_kwargs['session_factory']
     session_factory()

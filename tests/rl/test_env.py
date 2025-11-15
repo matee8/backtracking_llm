@@ -7,8 +7,9 @@ from unittest.mock import MagicMock
 
 from backtracking_llm.generation import GenerationSession
 from backtracking_llm.rl.env import BacktrackingEnv
+from backtracking_llm.rl.rewards import RewardShaper
 from backtracking_llm.rl.judges import MockJudge
-from backtracking_llm.rl.config import EnvConfig
+from backtracking_llm.rl.config import EnvConfig, ShapingConfig
 
 # pylint: disable=protected-access
 # pylint: disable=missing-class-docstring
@@ -57,12 +58,22 @@ def env_config():
 
 
 @pytest.fixture
+def mock_shaper():
+    shaper = MagicMock(spec=RewardShaper)
+    shaper.calculate.return_value = 0.1
+    return shaper
+
+
+@pytest.fixture
 def env(mock_session_factory, mock_judge, env_config):
-    return BacktrackingEnv(mock_session_factory, mock_judge, env_config)
+    shaper = RewardShaper(ShapingConfig())
+    return BacktrackingEnv(mock_session_factory, mock_judge, shaper, env_config)
 
 
-def test_env_initialization(mock_session_factory, mock_judge, env_config):
-    env = BacktrackingEnv(mock_session_factory, mock_judge, env_config)
+def test_env_initialization(mock_session_factory, mock_judge, mock_shaper,
+                            env_config):
+    env = BacktrackingEnv(mock_session_factory, mock_judge, mock_shaper,
+                          env_config)
     assert env.action_space.n == 4
     assert env.observation_space.shape == (4,)
 
@@ -81,7 +92,6 @@ def test_env_step_no_action(env):
 
     assert isinstance(obs, np.ndarray)
     assert obs.shape == (4,)
-    assert reward == 0.0
     assert isinstance(terminated, bool)
     assert isinstance(truncated, bool)
     assert isinstance(info, dict)
@@ -110,7 +120,7 @@ def test_env_episode_termination(env):
         _, reward, terminated, truncated, _ = env.step(0)
         total_reward += reward
 
-    assert total_reward > 0
+    assert total_reward != 0
     assert terminated or truncated
 
 
@@ -120,3 +130,39 @@ def test_env_render(env):
 
     text = env.render()
     assert isinstance(text, str)
+
+
+def test_env_step_calls_shaper(mock_session_factory, mock_judge, mock_shaper,
+                               env_config):
+    env = BacktrackingEnv(mock_session_factory, mock_judge, mock_shaper,
+                          env_config)
+    env.reset()
+    env.step(1)
+    mock_shaper.calculate.assert_called_once()
+    args, _ = mock_shaper.calculate.call_args
+    assert args[0] == 1
+    assert isinstance(args[1], np.ndarray)
+
+
+def test_env_intermediate_reward_is_from_shaper(mock_session_factory,
+                                                mock_judge, mock_shaper,
+                                                env_config):
+    env = BacktrackingEnv(mock_session_factory, mock_judge, mock_shaper,
+                          env_config)
+    env.reset()
+    _, reward, terminated, truncated, _ = env.step(0)
+    assert not terminated and not truncated
+    assert reward == 0.1
+
+
+def test_env_final_reward_is_sum_of_shaper_and_judge(mock_session_factory,
+                                                     mock_judge, mock_shaper,
+                                                     env_config):
+    env_config.max_seq_length = 1
+    env = BacktrackingEnv(mock_session_factory, mock_judge, mock_shaper,
+                          env_config)
+    env.reset()
+    mock_judge.score = MagicMock(return_value=3.5)
+    _, reward, _, _, _ = env.step(0)
+    assert reward == pytest.approx(0.1 + 3.5)
+    mock_judge.score.assert_called_once_with('test')

@@ -8,6 +8,7 @@ from stable_baselines3.common import env_checker
 from backtracking_llm.generation import Generator, GenerationSession
 from backtracking_llm.rl.config import RLConfig
 from backtracking_llm.rl.data import PromptProvider
+from backtracking_llm.rl.rewards import RewardShaper
 from backtracking_llm.rl.env import BacktrackingEnv
 from backtracking_llm.rl.judges import Judge, OpenAIJudge
 
@@ -33,6 +34,7 @@ class RLTrainer:
         self.generator = Generator.from_pretrained(config.model_name_or_path)
         self.generator.model.to(config.device)  # type: ignore
         self.judge: Judge = OpenAIJudge(config.judge)
+        self.shaper = RewardShaper(config.shaping)
 
     def train(self, prompt_provider: PromptProvider) -> None:
         """Executes the full RL training pipeline.
@@ -55,6 +57,7 @@ class RLTrainer:
 
         env = BacktrackingEnv(session_factory=session_factory,
                               judge=self.judge,
+                              shaper=self.shaper,
                               config=self.config.env)
 
         logger.info('Verifying environment compatibility...')

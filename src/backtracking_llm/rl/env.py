@@ -9,6 +9,7 @@ from gymnasium import Env, spaces
 
 from backtracking_llm.generation import GenerationSession
 from backtracking_llm.rl.config import EnvConfig
+from backtracking_llm.rl.rewards import RewardShaper
 from backtracking_llm.rl.judges import Judge
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class BacktrackingEnv(Env):
         self,
         session_factory: Callable[[], GenerationSession],
         judge: Judge,
+        shaper: RewardShaper,
         config: EnvConfig,
     ) -> None:
         """Initialize environment.
@@ -42,6 +44,7 @@ class BacktrackingEnv(Env):
         Args:
             session_factory: Zero-argument callable returning a fresh session
             judge: LLM-as-a-judge implementation for scoring
+            shaper: The reward shaper for calculating intermediate rewards.
             config: Environment configuration (max_backtrack, max_seq_length,
                 etc.)
         """
@@ -49,6 +52,7 @@ class BacktrackingEnv(Env):
 
         self.session_factory = session_factory
         self.judge = judge
+        self.shaper = shaper
         self.config = config
 
         self.session: Optional[GenerationSession] = None
@@ -118,23 +122,26 @@ class BacktrackingEnv(Env):
         self._last_step_result = step_result
 
         observation = self._build_observation(step_result)
+        reward = self.shaper.calculate(action, observation)
 
         terminated = self.session.done
         truncated = (self.session.generated_token_count
                      >= self.config.max_seq_length)
 
-        reward = 0.0
+        final_score = 0.0
 
         if terminated or truncated:
             generated_text = self.session.get_decoded_text()
             if not generated_text or not generated_text.strip():
-                reward = 0.0
+                final_score = 0.0
                 logger.info(
                     'Episode end: empty text produced, penalized '
                     'with score %.2f', reward)
             else:
-                reward = float(self.judge.score(generated_text))
+                final_score = float(self.judge.score(generated_text))
                 logger.info('Episode end: scored %.2f', reward)
+
+        reward += final_score
 
         return observation, reward, terminated, truncated, {}
 

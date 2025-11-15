@@ -82,6 +82,8 @@ class TrainingConfig:
         batch_size: Minibatch size for updates.
         n_epochs: Number of epochs per update.
         gamma: Discount factor for rewards.
+        ent_coef: Entropy coefficient for the loss calculation. Encourages
+            exploration.
         seed: Random seed for reproducibility.
     """
 
@@ -92,6 +94,7 @@ class TrainingConfig:
     batch_size: int = 64
     n_epochs: int = 10
     gamma: float = 0.99
+    ent_coef: float = 0.01
     seed: Optional[int] = None
 
     def __post_init__(self):
@@ -113,6 +116,8 @@ class TrainingConfig:
             raise ValueError('`n_epochs` must be positive')
         if not 0 <= self.gamma <= 1:
             raise ValueError('`gamma` must be between 0 and 1')
+        if self.ent_coef < 0:
+            raise ValueError('`ent_coef` must be non-negative')
 
 
 @dataclasses.dataclass

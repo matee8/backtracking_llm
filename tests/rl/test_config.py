@@ -128,6 +128,7 @@ class TestTrainingConfig:
         assert config.batch_size == 64
         assert config.n_epochs == 10
         assert config.gamma == 0.99
+        assert config.ent_coef == 0.01
         assert config.seed is None
 
     def test_custom_values(self):
@@ -138,6 +139,7 @@ class TestTrainingConfig:
                                 batch_size=32,
                                 n_epochs=5,
                                 gamma=0.95,
+                                ent_coef=0.05,
                                 seed=42)
         assert config.policy_type == 'CnnPolicy'
         assert config.total_timesteps == 50000
@@ -146,6 +148,7 @@ class TestTrainingConfig:
         assert config.batch_size == 32
         assert config.n_epochs == 5
         assert config.gamma == 0.95
+        assert config.ent_coef == 0.05
         assert config.seed == 42
 
     def test_zero_timesteps_raises(self):
@@ -368,3 +371,7 @@ class TestRLConfig:
     def test_output_dir_none_raises(self):
         with pytest.raises(ValueError, match='`output_dir` cannot be None'):
             RLConfig(model_name_or_path='gpt2', output_dir=None)  # type: ignore
+
+    def test_negative_ent_coef_raises(self):
+        with pytest.raises(ValueError, match='`ent_coef` must be non-negative'):
+            TrainingConfig(ent_coef=-0.1)

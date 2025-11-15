@@ -217,3 +217,8 @@ complex.prof
 # Benchmarking
 benchmark_results/
 experiment.yaml
+
+# RL training
+prompts.txt
+rl_config.yaml
+test_rl_output

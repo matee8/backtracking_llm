@@ -9,6 +9,7 @@ from pathlib import Path
 from backtracking_llm.rl.config import (
     EnvConfig,
     JudgeConfig,
+    ShapingConfig,
     RLConfig,
     TrainingConfig,
 )
@@ -225,6 +226,7 @@ class TestRLConfig:
         assert isinstance(config.judge, JudgeConfig)
         assert isinstance(config.env, EnvConfig)
         assert isinstance(config.training, TrainingConfig)
+        assert isinstance(config.shaping, ShapingConfig)
         assert config.output_dir == pathlib.Path('rl_output')
         assert config.device == 'auto'
 
@@ -232,11 +234,13 @@ class TestRLConfig:
         judge_config = JudgeConfig(model='gpt-4')
         env_config = EnvConfig(max_backtrack=10)
         training_config = TrainingConfig(total_timesteps=50000)
+        shaping_config = ShapingConfig(backtrack_action_penalty=0.5)
 
         config = RLConfig(model_name_or_path='gpt2',
                           judge=judge_config,
                           env=env_config,
                           training=training_config,
+                          shaping=shaping_config,
                           output_dir=pathlib.Path('custom_output'),
                           device='cuda:0')
 
@@ -244,6 +248,7 @@ class TestRLConfig:
         assert config.judge is judge_config
         assert config.env is env_config
         assert config.training is training_config
+        assert config.shaping is shaping_config
         assert config.output_dir == pathlib.Path('custom_output')
         assert config.device == 'cuda:0'
 
@@ -284,6 +289,7 @@ class TestRLConfig:
         assert isinstance(serialized['judge'], dict)
         assert isinstance(serialized['env'], dict)
         assert isinstance(serialized['training'], dict)
+        assert isinstance(serialized['shaping'], dict)
         assert isinstance(serialized['output_dir'], Path)
         assert serialized['device'] == 'auto'
 
@@ -299,7 +305,8 @@ class TestRLConfig:
                 'max_retries': 5
             },  # type: ignore
             env={'max_backtrack': 10},  # type: ignore
-            training={'total_timesteps': 50000}  # type: ignore
+            training={'total_timesteps': 50000},  # type: ignore
+            shaping={'backtrack_action_penalty': 0.05}  # type: ignore
         )
 
         assert isinstance(config.judge, JudgeConfig)
@@ -309,6 +316,9 @@ class TestRLConfig:
         assert config.env.max_backtrack == 10
         assert isinstance(config.training, TrainingConfig)
         assert config.training.total_timesteps == 50000
+        assert isinstance(config.shaping, ShapingConfig)
+        assert config.shaping.backtrack_action_penalty == 0.05
+        assert config.shaping.repetition_penalty_weight == 0.02
 
     def test_nested_dict_invalid_raises(self):
         with pytest.raises(ValueError,

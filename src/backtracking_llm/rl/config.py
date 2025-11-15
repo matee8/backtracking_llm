@@ -116,6 +116,32 @@ class TrainingConfig:
 
 
 @dataclasses.dataclass
+class ShapingConfig:
+    """Configuration for reward shaping.
+
+    These values define the weights and thresholds for intermediate rewards
+    and penalties provided to the agent at each step to guide its learning
+    process in a sparse reward environment.
+
+    Attributes:
+        backtrack_action_penalty: A fixed penalty applied for any backtrack
+            action.
+        backtrack_token_penalty: An additional penalty per token backtracked.
+        repetition_penalty_weight: A multiplier for the repetition feature
+            to turn it into a penalty.
+        high_confidence_reward: A reward for generating a token with high
+            confidence.
+        high_confidence_threshold: The probability threshold to trigger the
+            high confidence reward.
+    """
+    backtrack_action_penalty: float = 0.01
+    backtrack_token_penalty: float = 0.005
+    repetition_penalty_weight: float = 0.02
+    high_confidence_reward: float = 0.01
+    high_confidence_threshold: float = 0.9
+
+
+@dataclasses.dataclass
 class RLConfig:
     """Root configuration for RL operator training.
 
@@ -134,6 +160,7 @@ class RLConfig:
     judge: JudgeConfig = dataclasses.field(default_factory=JudgeConfig)
     env: EnvConfig = dataclasses.field(default_factory=EnvConfig)
     training: TrainingConfig = dataclasses.field(default_factory=TrainingConfig)
+    shaping: ShapingConfig = dataclasses.field(default_factory=ShapingConfig)
     output_dir: Path = dataclasses.field(
         default_factory=lambda: Path('rl_output'))
     device: str = 'auto'
@@ -164,3 +191,5 @@ class RLConfig:
             self.env = EnvConfig(**self.env)
         if isinstance(self.training, dict):
             self.training = TrainingConfig(**self.training)
+        if isinstance(self.shaping, dict):
+            self.shaping = ShapingConfig(**self.shaping)

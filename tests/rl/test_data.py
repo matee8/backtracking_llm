@@ -37,6 +37,9 @@ def test_get_prompt_cycles_through_prompts(prompt_file: Path):
 
 
 def test_shuffle_randomizes_prompt_order(prompt_file: Path):
+    import random
+    random.seed(42)
+
     provider_no_shuffle = TextFilePromptProvider(prompt_file, shuffle=False)
     provider_shuffle = TextFilePromptProvider(prompt_file, shuffle=True)
 

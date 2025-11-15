@@ -72,6 +72,7 @@ class RLTrainer:
             batch_size=self.config.training.batch_size,
             n_epochs=self.config.training.n_epochs,
             gamma=self.config.training.gamma,
+            ent_coef=self.config.training.ent_coef,
             seed=self.config.training.seed,
             device=self.config.device,
             verbose=1,

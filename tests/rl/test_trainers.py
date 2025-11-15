@@ -21,7 +21,7 @@ def mock_config(tmp_path: Path) -> RLConfig:
         output_dir=tmp_path / 'output',
         judge=JudgeConfig(model='mock-judge'),
         env=EnvConfig(max_seq_length=50),
-        training=TrainingConfig(total_timesteps=100, n_steps=10),
+        training=TrainingConfig(total_timesteps=100, n_steps=10, ent_coef=0.05),
     )
 
 
@@ -34,8 +34,9 @@ def mock_prompt_provider() -> mock.Mock:
 
 @mock.patch('backtracking_llm.rl.trainers.Generator.from_pretrained')
 @mock.patch('backtracking_llm.rl.trainers.OpenAIJudge')
-def test_trainer_initialization(mock_judge_cls, mock_generator_cls,
-                                mock_config):
+@mock.patch('backtracking_llm.rl.trainers.RewardShaper')
+def test_trainer_initialization(mock_shaper_cls, mock_judge_cls,
+                                mock_generator_cls, mock_config):
     mock_generator_instance = mock.Mock()
     mock_generator_cls.return_value = mock_generator_instance
 
@@ -44,6 +45,7 @@ def test_trainer_initialization(mock_judge_cls, mock_generator_cls,
     mock_generator_cls.assert_called_once_with(mock_config.model_name_or_path)
     mock_generator_instance.model.to.assert_called_once_with(mock_config.device)
     mock_judge_cls.assert_called_once_with(mock_config.judge)
+    mock_shaper_cls.assert_called_once_with(mock_config.shaping)
     assert trainer.config == mock_config
 
 
@@ -53,7 +55,9 @@ def test_trainer_initialization(mock_judge_cls, mock_generator_cls,
 @mock.patch('backtracking_llm.rl.trainers.env_checker')
 @mock.patch('backtracking_llm.rl.trainers.PPO')
 @mock.patch('backtracking_llm.rl.trainers.GenerationSession')
+@mock.patch('backtracking_llm.rl.trainers.RewardShaper')
 def test_train_method_orchestration(
+    mock_shaper_cls,
     mock_session_cls,
     mock_ppo_cls,
     mock_check_env,
@@ -69,10 +73,12 @@ def test_train_method_orchestration(
     trainer = RLTrainer(config=mock_config)
     trainer.train(prompt_provider=mock_prompt_provider)
 
+    mock_shaper_cls.assert_called_once_with(mock_config.shaping)
     mock_env_cls.assert_called_once()
     _, env_kwargs = mock_env_cls.call_args
     assert 'session_factory' in env_kwargs
     assert env_kwargs['judge'] is trainer.judge
+    assert env_kwargs['shaper'] is trainer.shaper
     assert env_kwargs['config'] == mock_config.env
     mock_check_env.check_env.assert_called_once_with(mock_env_instance)
 
@@ -94,6 +100,7 @@ def test_train_method_orchestration(
         batch_size=mock_config.training.batch_size,
         n_epochs=mock_config.training.n_epochs,
         gamma=mock_config.training.gamma,
+        ent_coef=mock_config.training.ent_coef,
         seed=mock_config.training.seed,
         device=mock_config.device,
         verbose=1,

@@ -34,10 +34,18 @@ class RewardShaper:
         Returns:
             A scalar reward value for the given step.
         """
-        if action <= 0:
-            return 0.0
+        reward = 0.0
 
-        penalty = (self.config.backtrack_action_penalty +
-                   action * self.config.backtrack_token_penalty)
+        if action > 0:
+            penalty = (self.config.backtrack_action_penalty +
+                       action * self.config.backtrack_token_penalty)
+            reward -= penalty
 
-        return -penalty
+        repetition_feature = observation[3]
+        reward -= repetition_feature * self.config.repetition_penalty_weight
+
+        top1_prob = observation[1]  # Index 1 is top1_probability
+        if top1_prob > self.config.high_confidence_threshold:
+            reward += self.config.high_confidence_reward
+
+        return reward

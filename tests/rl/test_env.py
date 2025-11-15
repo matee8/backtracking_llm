@@ -88,7 +88,7 @@ def test_env_reset(env):
 def test_env_step_no_action(env):
     env.reset()
 
-    obs, reward, terminated, truncated, info = env.step(0)
+    obs, _, terminated, truncated, info = env.step(0)
 
     assert isinstance(obs, np.ndarray)
     assert obs.shape == (4,)

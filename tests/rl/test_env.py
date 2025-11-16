@@ -74,16 +74,14 @@ def test_env_initialization(mock_session_factory, mock_judge, mock_shaper,
                             env_config):
     env = BacktrackingEnv(mock_session_factory, mock_judge, mock_shaper,
                           env_config)
-
-    assert env.action_space.n == env_config.max_backtrack + 1
-    assert env.observation_space.shape == (env_config.history_len * 4,)
+    assert env.action_space.n == 4
+    assert env.observation_space.shape == (4,)
 
 
 def test_env_reset(env):
     obs, info = env.reset()
     assert isinstance(obs, np.ndarray)
-    assert obs.shape == env.observation_space.shape
-    assert np.all(obs == 0)
+    assert obs.shape == (4,)
     assert isinstance(info, dict)
 
 
@@ -93,7 +91,7 @@ def test_env_step_no_action(env):
     obs, _, terminated, truncated, info = env.step(0)
 
     assert isinstance(obs, np.ndarray)
-    assert obs.shape == env.observation_space.shape
+    assert obs.shape == (4,)
     assert isinstance(terminated, bool)
     assert isinstance(truncated, bool)
     assert isinstance(info, dict)
@@ -106,7 +104,7 @@ def test_env_step_with_backtrack(env):
 
     obs, _, _, _, _ = env.step(1)
 
-    assert obs.shape == env.observation_space.shape
+    assert obs.shape == (4,)
 
 
 def test_env_episode_termination(env):
@@ -168,38 +166,3 @@ def test_env_final_reward_is_sum_of_shaper_and_judge(mock_session_factory,
     _, reward, _, _, _ = env.step(0)
     assert reward == pytest.approx(0.1 + 3.5)
     mock_judge.score.assert_called_once_with('test')
-
-
-def test_observation_stacking_logic(mock_session_factory, mock_judge,
-                                    mock_shaper, env_config: EnvConfig):
-    env = BacktrackingEnv(mock_session_factory, mock_judge, mock_shaper,
-                          env_config)
-
-    step_outputs = [
-        np.array([0.1] * 4, dtype=np.float32),
-        np.array([0.2] * 4, dtype=np.float32),
-        np.array([0.3] * 4, dtype=np.float32),
-        np.array([0.4] * 4, dtype=np.float32),
-    ]
-    env._build_observation = MagicMock(side_effect=step_outputs)
-
-    obs, _ = env.reset()
-    assert obs.shape == (12,)
-    assert np.all(obs == 0)
-
-    obs, _, _, _, _ = env.step(0)
-    assert np.allclose(obs, np.concatenate([np.zeros(8), step_outputs[0]]))
-
-    obs, _, _, _, _ = env.step(0)
-    assert np.allclose(
-        obs, np.concatenate([np.zeros(4), step_outputs[0], step_outputs[1]]))
-
-    obs, _, _, _, _ = env.step(0)
-    assert np.allclose(
-        obs, np.concatenate([step_outputs[0], step_outputs[1],
-                             step_outputs[2]]))
-
-    obs, _, _, _, _ = env.step(0)
-    assert np.allclose(
-        obs, np.concatenate([step_outputs[1], step_outputs[2],
-                             step_outputs[3]]))

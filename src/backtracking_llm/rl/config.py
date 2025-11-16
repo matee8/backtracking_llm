@@ -49,15 +49,12 @@ class EnvConfig:
     Attributes:
         max_backtrack: Maximum tokens that can be removed in one action.
         max_seq_length: Maximum sequence length before truncation.
-        history_len: The number of past observations to stack, providing
-            temporal context to the agent.
         judge_prompt_template: Optional custom prompt template for judge.
     """
 
     max_backtrack: int = 5
     max_seq_length: int = 512
     judge_prompt_template: Optional[str] = None
-    history_len: int = 3
 
     def __post_init__(self):
         """Validate environment configuration."""
@@ -65,8 +62,6 @@ class EnvConfig:
             raise ValueError('`max_backtrack` must be non-negative')
         if self.max_seq_length < 1:
             raise ValueError('`max_seq_length` must be non-negative')
-        if self.history_len < 1:
-            raise ValueError('`history_len` must be positive')
 
         if self.judge_prompt_template is not None:
             self.judge_prompt_template = str(self.judge_prompt_template).strip()

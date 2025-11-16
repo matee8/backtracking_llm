@@ -5,7 +5,6 @@ from unittest import mock
 
 import pytest
 from sb3_contrib import RecurrentPPO
-from stable_baselines3.common.vec_env import DummyVecEnv
 
 from backtracking_llm.rl.config import (EnvConfig, JudgeConfig, RLConfig,
                                         TrainingConfig)
@@ -56,13 +55,11 @@ def test_trainer_initialization(mock_shaper_cls, mock_judge_cls,
 @mock.patch('backtracking_llm.rl.trainers.SB3LstmWrapper')
 @mock.patch('backtracking_llm.rl.trainers.env_checker')
 @mock.patch('backtracking_llm.rl.trainers.RecurrentPPO')
-@mock.patch('backtracking_llm.rl.trainers.GenerationSession')
 @mock.patch('backtracking_llm.rl.trainers.RewardShaper')
 @mock.patch('backtracking_llm.rl.trainers.BacktrackingEnv')
 def test_train_method_orchestration(
     mock_env_cls,
     mock_shaper_cls,
-    mock_session_cls,
     mock_recurrent_ppo_cls,
     mock_check_env,
     mock_wrapper_cls,
@@ -86,8 +83,6 @@ def test_train_method_orchestration(
                                     config=mock_config.env)
     mock_wrapper_cls.assert_called_with(mock.ANY)
     mock_check_env.check_env.assert_called_with(created_env)
-
-    _, env_kwargs = mock_env_cls.call_args
 
     session_factory = mock_env_cls.call_args.kwargs['session_factory']
     session_factory()

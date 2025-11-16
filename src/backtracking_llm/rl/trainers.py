@@ -4,7 +4,6 @@ import logging
 
 from sb3_contrib import RecurrentPPO
 from stable_baselines3.common import env_checker
-from stable_baselines3.common.policies import ActorCriticPolicy
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from backtracking_llm.generation import Generator, GenerationSession

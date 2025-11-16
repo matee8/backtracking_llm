@@ -133,7 +133,7 @@ class BacktrackingEnv(Env):
         if terminated or truncated:
             generated_text = self.session.get_decoded_text()
             if not generated_text or not generated_text.strip():
-                final_score = 0.0
+                final_score = -1.0
                 logger.info(
                     'Episode end: empty text produced, penalized '
                     'with score %.2f', reward)

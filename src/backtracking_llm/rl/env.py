@@ -1,6 +1,7 @@
 """OpenAI Gym environment wrapper for backtracking generation."""
 
 import logging
+from collections import deque
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
@@ -51,6 +52,8 @@ class BacktrackingEnv(Env):
         super().__init__()
 
         self.session_factory = session_factory
+        self._feature_count = 4
+        self.history_len = config.history_len
         self.judge = judge
         self.shaper = shaper
         self.config = config
@@ -58,11 +61,13 @@ class BacktrackingEnv(Env):
         self.session: Optional[GenerationSession] = None
         self._last_step_result: Optional[Any] = None
 
+        self.observation_history = deque(maxlen=self.history_len)
         self.action_space = spaces.Discrete(config.max_backtrack + 1)
 
         self.observation_space = spaces.Box(low=0.0,
                                             high=1.0,
-                                            shape=(4,),
+                                            shape=(self.history_len *
+                                                   self._feature_count,),
                                             dtype=np.float32)
 
         logger.info(
@@ -90,10 +95,13 @@ class BacktrackingEnv(Env):
         self.session = self.session_factory()
         self._last_step_result = None
 
-        observation = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+        self.observation_history.clear()
+        for _ in range(self.history_len):
+            self.observation_history.append(
+                np.zeros(self._feature_count, dtype=np.float32))
 
         logger.debug('Environment reset complete')
-        return observation, {}
+        return np.array(self.observation_history).flatten(), {}
 
     def step(
             self, action: int
@@ -121,7 +129,9 @@ class BacktrackingEnv(Env):
         step_result = self.session.step()
         self._last_step_result = step_result
 
-        observation = self._build_observation(step_result)
+        single_step_observation = self._build_observation(step_result)
+        self.observation_history.append(single_step_observation)
+        observation = np.array(self.observation_history).flatten()
         reward = self.shaper.calculate(action, observation)
 
         terminated = self.session.done
@@ -155,7 +165,7 @@ class BacktrackingEnv(Env):
         - repetition_penalty: 0 if last token is unique, increases with repeats
         """
         if self.session is None:
-            return np.zeros(4, dtype=np.float32)
+            return np.zeros(self._feature_count, dtype=np.float32)
 
         seq_len = self.session.token_ids.shape[1]
         prompt_len = self.session.prompt_length

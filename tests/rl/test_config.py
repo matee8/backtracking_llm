@@ -83,10 +83,12 @@ class TestEnvConfig:
     def test_custom_values(self):
         config = EnvConfig(max_backtrack=10,
                            max_seq_length=1024,
-                           judge_prompt_template='Rate this: {text}')
+                           judge_prompt_template='Rate this: {text}',
+                           history_len=5)
         assert config.max_backtrack == 10
         assert config.max_seq_length == 1024
         assert config.judge_prompt_template == 'Rate this: {text}'
+        assert config.history_len == 5
 
     def test_zero_max_backtrack_raises(self):
         with pytest.raises(ValueError,
@@ -115,6 +117,14 @@ class TestEnvConfig:
     def test_whitespace_prompt_template_becomes_none(self):
         config = EnvConfig(judge_prompt_template='   ')
         assert config.judge_prompt_template is None
+
+    def test_zero_history_len_raises(self):
+        with pytest.raises(ValueError, match='`history_len` must be positive'):
+            EnvConfig(history_len=0)
+
+    def test_negative_history_len_raises(self):
+        with pytest.raises(ValueError, match='`history_len` must be positive'):
+            EnvConfig(history_len=-1)
 
 
 class TestTrainingConfig:

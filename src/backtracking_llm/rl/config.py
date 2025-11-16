@@ -87,7 +87,7 @@ class TrainingConfig:
         seed: Random seed for reproducibility.
     """
 
-    policy_type: str = 'MlpPolicy'
+    policy_type: str = 'MlpLstmPolicy'
     total_timesteps: int = 10000
     learning_rate: float = 3e-4
     n_steps: int = 2048
@@ -99,7 +99,8 @@ class TrainingConfig:
 
     def __post_init__(self):
         """Validate training configuration."""
-        supported_policies = ('MlpPolicy', 'CnnPolicy', 'MultiInputPolicy')
+        supported_policies = ('MlpPolicy', 'CnnPolicy', 'MultiInputPolicy',
+                              'MlpLstmPolicy')
         if self.policy_type not in supported_policies:
             raise ValueError(f'Unsupported policy_type `{self.policy_type}`. '
                              f"Supported: {'`, `'.join(supported_policies)}")

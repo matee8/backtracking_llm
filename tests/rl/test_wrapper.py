@@ -8,6 +8,8 @@ import pytest
 
 from backtracking_llm.rl.wrapper import SB3LstmWrapper
 
+# pylint: disable=redefined-outer-scope
+
 
 @pytest.fixture
 def mock_env() -> gym.Env:

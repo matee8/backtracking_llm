@@ -5,6 +5,7 @@ from unittest import mock
 
 import pytest
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv
 
 from backtracking_llm.rl.config import (EnvConfig, JudgeConfig, RLConfig,
                                         TrainingConfig)
@@ -55,9 +56,11 @@ def test_trainer_initialization(mock_shaper_cls, mock_judge_cls,
 @mock.patch('backtracking_llm.rl.trainers.env_checker')
 @mock.patch('backtracking_llm.rl.trainers.PPO')
 @mock.patch('backtracking_llm.rl.trainers.GenerationSession')
-@mock.patch('backtracking_llm.rl.trainers.RewardShaper')
+@mock.patch('backtracking_llm.rl.trainers.SB3LstmWrapper')
+@mock.patch('backtracking_llm.rl.trainers.DummyVecEnv')
 def test_train_method_orchestration(
-    mock_shaper_cls,
+    mock_dummy_vec_env_cls,
+    mock_wrapper_cls,
     mock_session_cls,
     mock_ppo_cls,
     mock_check_env,
@@ -67,20 +70,24 @@ def test_train_method_orchestration(
 ):
     mock_agent_instance = mock.Mock(spec=PPO)
     mock_ppo_cls.return_value = mock_agent_instance
-    mock_env_instance = mock.Mock()
-    mock_env_cls.return_value = mock_env_instance
+    mock_vec_env_instance = mock.Mock(spec=DummyVecEnv)
+    mock_dummy_vec_env_cls.return_value = mock_vec_env_instance
 
     trainer = RLTrainer(config=mock_config)
     trainer.train(prompt_provider=mock_prompt_provider)
 
-    mock_shaper_cls.assert_called_once_with(mock_config.shaping)
-    mock_env_cls.assert_called_once()
+    mock_dummy_vec_env_cls.assert_called_once()
+    env_factory = mock_dummy_vec_env_cls.call_args[0][0][0]
+    created_env = env_factory()
+
+    mock_env_cls.assert_called_with(session_factory=mock.ANY,
+                                    judge=trainer.judge,
+                                    shaper=trainer.shaper,
+                                    config=mock_config.env)
+    mock_wrapper_cls.assert_called_with(mock.ANY)
+    mock_check_env.check_env.assert_called_with(created_env)
+
     _, env_kwargs = mock_env_cls.call_args
-    assert 'session_factory' in env_kwargs
-    assert env_kwargs['judge'] is trainer.judge
-    assert env_kwargs['shaper'] is trainer.shaper
-    assert env_kwargs['config'] == mock_config.env
-    mock_check_env.check_env.assert_called_once_with(mock_env_instance)
 
     session_factory = env_kwargs['session_factory']
     session_factory()
@@ -94,7 +101,7 @@ def test_train_method_orchestration(
 
     mock_ppo_cls.assert_called_once_with(
         policy=mock_config.training.policy_type,
-        env=mock_env_instance,
+        env=mock_vec_env_instance,
         learning_rate=mock_config.training.learning_rate,
         n_steps=mock_config.training.n_steps,
         batch_size=mock_config.training.batch_size,

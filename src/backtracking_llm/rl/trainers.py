@@ -4,6 +4,7 @@ import logging
 
 from stable_baselines3 import PPO
 from stable_baselines3.common import env_checker
+from stable_baselines3.common.vec_env import DummyVecEnv
 
 from backtracking_llm.generation import Generator, GenerationSession
 from backtracking_llm.rl.config import RLConfig
@@ -11,6 +12,7 @@ from backtracking_llm.rl.data import PromptProvider
 from backtracking_llm.rl.rewards import RewardShaper
 from backtracking_llm.rl.env import BacktrackingEnv
 from backtracking_llm.rl.judges import Judge, OpenAIJudge
+from backtracking_llm.rl.wrapper import SB3LstmWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +57,19 @@ class RLTrainer:
                 prompt=prompt,
                 max_new_tokens=self.config.env.max_seq_length)
 
-        env = BacktrackingEnv(session_factory=session_factory,
-                              judge=self.judge,
-                              shaper=self.shaper,
-                              config=self.config.env)
+        def env_factory() -> SB3LstmWrapper:
+            """Creates the base environment for the VecEnv."""
+            env = BacktrackingEnv(session_factory=session_factory,
+                                  judge=self.judge,
+                                  shaper=self.shaper,
+                                  config=self.config.env)
+            return SB3LstmWrapper(env)
 
         logger.info('Verifying environment compatibility...')
-        env_checker.check_env(env)
+        env_checker.check_env(env_factory())
         logger.info('Environment check passed.')
+
+        env = DummyVecEnv([env_factory])
 
         agent = PPO(
             policy=self.config.training.policy_type,

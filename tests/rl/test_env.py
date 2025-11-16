@@ -74,14 +74,15 @@ def test_env_initialization(mock_session_factory, mock_judge, mock_shaper,
                             env_config):
     env = BacktrackingEnv(mock_session_factory, mock_judge, mock_shaper,
                           env_config)
-    assert env.action_space.n == 4
-    assert env.observation_space.shape == (4,)
+    action_space_size = env_config.max_backtrack + 1
+    assert env.action_space.n == action_space_size
+    assert env.observation_space.shape == (4 + action_space_size,)
 
 
 def test_env_reset(env):
     obs, info = env.reset()
     assert isinstance(obs, np.ndarray)
-    assert obs.shape == (4,)
+    assert obs.shape == env.observation_space.shape
     assert isinstance(info, dict)
 
 
@@ -91,7 +92,7 @@ def test_env_step_no_action(env):
     obs, _, terminated, truncated, info = env.step(0)
 
     assert isinstance(obs, np.ndarray)
-    assert obs.shape == (4,)
+    assert obs.shape == env.observation_space.shape
     assert isinstance(terminated, bool)
     assert isinstance(truncated, bool)
     assert isinstance(info, dict)
@@ -104,7 +105,7 @@ def test_env_step_with_backtrack(env):
 
     obs, _, _, _, _ = env.step(1)
 
-    assert obs.shape == (4,)
+    assert obs.shape == env.observation_space.shape
 
 
 def test_env_episode_termination(env):
@@ -141,7 +142,7 @@ def test_env_step_calls_shaper(mock_session_factory, mock_judge, mock_shaper,
     mock_shaper.calculate.assert_called_once()
     args, _ = mock_shaper.calculate.call_args
     assert args[0] == 1
-    assert isinstance(args[1], np.ndarray)
+    assert args[1].shape == (4,)
 
 
 def test_env_intermediate_reward_is_from_shaper(mock_session_factory,
@@ -166,3 +167,17 @@ def test_env_final_reward_is_sum_of_shaper_and_judge(mock_session_factory,
     _, reward, _, _, _ = env.step(0)
     assert reward == pytest.approx(0.1 + 3.5)
     mock_judge.score.assert_called_once_with('test')
+
+
+def test_last_action_in_observation(mock_session_factory, mock_judge,
+                                    mock_shaper, env_config: EnvConfig):
+    env = BacktrackingEnv(mock_session_factory, mock_judge, mock_shaper,
+                          env_config)
+    obs, _ = env.reset()
+    assert np.all(obs[-4:] == [1, 0, 0, 0])
+
+    obs, _, _, _, _ = env.step(2)
+    assert np.all(obs[-4:] == [1, 0, 0, 0])
+
+    obs, _, _, _, _ = env.step(1)
+    assert np.all(obs[-4:] == [0, 0, 1, 0])

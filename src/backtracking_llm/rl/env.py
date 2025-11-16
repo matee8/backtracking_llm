@@ -57,13 +57,12 @@ class BacktrackingEnv(Env):
 
         self.session: Optional[GenerationSession] = None
         self._last_step_result: Optional[Any] = None
-        self._last_action = 0
 
         self.action_space = spaces.Discrete(config.max_backtrack + 1)
 
         self.observation_space = spaces.Box(low=0.0,
                                             high=1.0,
-                                            shape=(4 + self.action_space.n,),
+                                            shape=(4,),
                                             dtype=np.float32)
 
         logger.info(
@@ -90,11 +89,8 @@ class BacktrackingEnv(Env):
 
         self.session = self.session_factory()
         self._last_step_result = None
-        self._last_action = 0
 
-        initial_features = np.zeros(4, dtype=np.float32)
-        initial_action = self._one_hot_encode(self._last_action)
-        observation = np.concatenate([initial_features, initial_action])
+        observation = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
 
         logger.debug('Environment reset complete')
         return observation, {}
@@ -125,11 +121,8 @@ class BacktrackingEnv(Env):
         step_result = self.session.step()
         self._last_step_result = step_result
 
-        features = self._build_observation(step_result)
-        last_action_one_hot = self._one_hot_encode(self._last_action)
-        observation = np.concatenate([features, last_action_one_hot])
-        reward = self.shaper.calculate(action, features)
-        self._last_action = action
+        observation = self._build_observation(step_result)
+        reward = self.shaper.calculate(action, observation)
 
         terminated = self.session.done
         truncated = (self.session.generated_token_count
@@ -151,12 +144,6 @@ class BacktrackingEnv(Env):
         reward += final_score
 
         return observation, reward, terminated, truncated, {}
-
-    def _one_hot_encode(self, value: int) -> np.ndarray:
-        """One-hot encodes an integer value."""
-        one_hot = np.zeros(self.action_space.n, dtype=np.float32)
-        one_hot[value] = 1.0
-        return one_hot
 
     def _build_observation(self, step_result) -> np.ndarray:
         """Compute feature vector from generation state.

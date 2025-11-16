@@ -2,8 +2,9 @@
 
 import logging
 
-from stable_baselines3 import PPO
+from sb3_contrib import RecurrentPPO
 from stable_baselines3.common import env_checker
+from stable_baselines3.common.policies import ActorCriticPolicy
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from backtracking_llm.generation import Generator, GenerationSession
@@ -71,7 +72,7 @@ class RLTrainer:
 
         env = DummyVecEnv([env_factory])
 
-        agent = PPO(
+        agent = RecurrentPPO(
             policy=self.config.training.policy_type,
             env=env,
             learning_rate=self.config.training.learning_rate,

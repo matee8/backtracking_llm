@@ -8,7 +8,7 @@ import pytest
 
 from backtracking_llm.rl.wrapper import SB3LstmWrapper
 
-# pylint: disable=redefined-outer-scope
+# pylint: disable=redefined-outer-name
 
 
 @pytest.fixture

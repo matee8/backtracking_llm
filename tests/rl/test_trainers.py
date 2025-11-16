@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from stable_baselines3 import PPO
+from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from backtracking_llm.rl.config import (EnvConfig, JudgeConfig, RLConfig,
@@ -52,32 +52,32 @@ def test_trainer_initialization(mock_shaper_cls, mock_judge_cls,
 
 @mock.patch('backtracking_llm.rl.trainers.Generator.from_pretrained')
 @mock.patch('backtracking_llm.rl.trainers.OpenAIJudge')
-@mock.patch('backtracking_llm.rl.trainers.BacktrackingEnv')
-@mock.patch('backtracking_llm.rl.trainers.env_checker')
-@mock.patch('backtracking_llm.rl.trainers.PPO')
-@mock.patch('backtracking_llm.rl.trainers.GenerationSession')
-@mock.patch('backtracking_llm.rl.trainers.SB3LstmWrapper')
 @mock.patch('backtracking_llm.rl.trainers.DummyVecEnv')
+@mock.patch('backtracking_llm.rl.trainers.SB3LstmWrapper')
+@mock.patch('backtracking_llm.rl.trainers.env_checker')
+@mock.patch('backtracking_llm.rl.trainers.RecurrentPPO')
+@mock.patch('backtracking_llm.rl.trainers.GenerationSession')
+@mock.patch('backtracking_llm.rl.trainers.RewardShaper')
+@mock.patch('backtracking_llm.rl.trainers.BacktrackingEnv')
 def test_train_method_orchestration(
-    mock_dummy_vec_env_cls,
-    mock_wrapper_cls,
-    mock_session_cls,
-    mock_ppo_cls,
-    mock_check_env,
     mock_env_cls,
+    mock_shaper_cls,
+    mock_session_cls,
+    mock_recurrent_ppo_cls,
+    mock_check_env,
+    mock_wrapper_cls,
+    mock_dummy_vec_env_cls,
     mock_config: RLConfig,
     mock_prompt_provider: mock.Mock,
 ):
-    mock_agent_instance = mock.Mock(spec=PPO)
-    mock_ppo_cls.return_value = mock_agent_instance
-    mock_vec_env_instance = mock.Mock(spec=DummyVecEnv)
-    mock_dummy_vec_env_cls.return_value = mock_vec_env_instance
+    mock_agent_instance = mock.Mock(spec=RecurrentPPO)
+    mock_recurrent_ppo_cls.return_value = mock_agent_instance
 
     trainer = RLTrainer(config=mock_config)
     trainer.train(prompt_provider=mock_prompt_provider)
 
     mock_dummy_vec_env_cls.assert_called_once()
-    env_factory = mock_dummy_vec_env_cls.call_args[0][0][0]
+    env_factory = mock_dummy_vec_env_cls.call_args.args[0][0]
     created_env = env_factory()
 
     mock_env_cls.assert_called_with(session_factory=mock.ANY,
@@ -89,7 +89,7 @@ def test_train_method_orchestration(
 
     _, env_kwargs = mock_env_cls.call_args
 
-    session_factory = env_kwargs['session_factory']
+    session_factory = mock_env_cls.call_args.kwargs['session_factory']
     session_factory()
     mock_prompt_provider.get_prompt.assert_called_once()
     mock_session_cls.assert_called_once_with(
@@ -99,9 +99,9 @@ def test_train_method_orchestration(
         max_new_tokens=mock_config.env.max_seq_length,
     )
 
-    mock_ppo_cls.assert_called_once_with(
+    mock_recurrent_ppo_cls.assert_called_once_with(
         policy=mock_config.training.policy_type,
-        env=mock_vec_env_instance,
+        env=mock.ANY,
         learning_rate=mock_config.training.learning_rate,
         n_steps=mock_config.training.n_steps,
         batch_size=mock_config.training.batch_size,

@@ -55,11 +55,11 @@ def test_trainer_initialization(mock_shaper_cls, mock_judge_cls,
 @mock.patch('backtracking_llm.rl.trainers.SB3LstmWrapper')
 @mock.patch('backtracking_llm.rl.trainers.env_checker')
 @mock.patch('backtracking_llm.rl.trainers.RecurrentPPO')
-@mock.patch('backtracking_llm.rl.trainers.RewardShaper')
+@mock.patch('backtracking_llm.rl.trainers.GenerationSession')
 @mock.patch('backtracking_llm.rl.trainers.BacktrackingEnv')
 def test_train_method_orchestration(
     mock_env_cls,
-    mock_shaper_cls,
+    mock_session_cls,
     mock_recurrent_ppo_cls,
     mock_check_env,
     mock_wrapper_cls,

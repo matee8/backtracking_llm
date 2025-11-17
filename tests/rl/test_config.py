@@ -121,7 +121,7 @@ class TestTrainingConfig:
 
     def test_default_values(self):
         config = TrainingConfig()
-        assert config.policy_type == 'MlpPolicy'
+        assert config.policy_type == 'MlpLstmPolicy'
         assert config.total_timesteps == 10000
         assert config.learning_rate == 3e-4
         assert config.n_steps == 2048

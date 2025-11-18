@@ -35,6 +35,7 @@ class RLTrainer:
         self.config = config
         self.generator = Generator.from_pretrained(config.model_name_or_path)
         self.generator.model.to(config.device)  # type: ignore
+        self.generator.model.eval()
         self.judge: Judge = OpenAIJudge(config.judge)
         self.shaper = RewardShaper(config.shaping)
 

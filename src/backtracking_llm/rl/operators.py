@@ -9,7 +9,6 @@ import logging
 from collections import deque
 from pathlib import Path
 
-import numpy as np
 from stable_baselines3 import PPO
 from torch import Tensor
 

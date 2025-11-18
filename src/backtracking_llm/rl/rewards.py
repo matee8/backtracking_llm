@@ -23,7 +23,7 @@ class RewardShaper:
         """
         self.config = config
 
-    def calculate(self, action: int, observation: np.ndarray) -> float:
+    def __call__(self, action: int, observation: np.ndarray) -> float:
         """Calculates the shaping reward for a single environment step.
 
         Args:

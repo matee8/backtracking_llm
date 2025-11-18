@@ -132,7 +132,7 @@ class BacktrackingEnv(Env):
             step_count=self.session.generated_token_count,
             max_seq_length=self.config.max_seq_length,
             history=history_tokens)
-        reward = self.shaper.calculate(action, observation)
+        reward = self.shaper(action, observation)
 
         terminated = self.session.done
         truncated = (self.session.generated_token_count

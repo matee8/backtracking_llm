@@ -66,6 +66,8 @@ class RlPolicyOperator:
         self._step_count = 0
         self._history: deque[str] = deque(maxlen=5)
 
+        self.policy_path = policy_path
+
     def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
         """Execute the RL policy to decide whether to backtrack.
@@ -114,3 +116,8 @@ class RlPolicyOperator:
         self._step_count = max(0, self._step_count - n_tokens)
         for _ in range(min(n_tokens, len(self._history))):
             self._history.pop()
+
+    def __repr__(self) -> str:
+        """Returns a string representation of the operator."""
+        return (f'RlPolicyOperator(policy_path={self.policy_path!r}, '
+                f'max_seq_length={self.max_seq_length!r})')

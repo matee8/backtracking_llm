@@ -18,12 +18,12 @@ logger = logging.getLogger(__name__)
 class BacktrackingEnv(Env):
     """Gymnasium environment for training RL agents to learn backtracking
     policies.
-    
+
     The environment wraps a GenerationSession and exposes:
     - Observations: Vector of generation state features
     - Actions: Discrete backtrack count (0 = no-op)
     - Rewards: Final text quality score from Judge (sparse)
-    
+
     Attributes:
         session_factory: Callable that creates new GenerationSession instances
         judge: Judge that scores final generations
@@ -87,8 +87,12 @@ class BacktrackingEnv(Env):
             torch.manual_seed(seed)
             np.random.seed(seed)
 
+        if self.session is not None:
+            del self.session
+            self._last_step_result = None
+            torch.cuda.empty_cache()
+
         self.session = self.session_factory()
-        self._last_step_result = None
 
         observation = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
 

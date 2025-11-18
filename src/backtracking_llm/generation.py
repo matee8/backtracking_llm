@@ -127,13 +127,18 @@ class GenerationSession:
         if self._done:
             raise RuntimeError('Cannot step: generation is already done.')
 
-        outputs = self.model(
-            input_ids=(self._input_ids[:, -1:]
-                       if self._generated_token_count > 0 else self._input_ids),
-            past_key_values=self._past_key_values,
-            use_cache=True)
-        next_token_logits = outputs.logits[:, -1, :]
-        self._past_key_values = outputs.past_key_values
+        context_manager = (torch.inference_mode() if hasattr(
+            torch, 'inference_mode') else torch.no_grad())
+
+        with context_manager:
+            outputs = self.model(
+                input_ids=(self._input_ids[:,
+                                           -1:] if self._generated_token_count
+                           > 0 else self._input_ids),
+                past_key_values=self._past_key_values,
+                use_cache=True)
+            next_token_logits = outputs.logits[:, -1, :]
+            self._past_key_values = outputs.past_key_values
 
         if self.temperature > 0:
             next_token_logits = next_token_logits / self.temperature

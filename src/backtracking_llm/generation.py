@@ -231,6 +231,12 @@ class GenerationSession:
         return self.tokenizer.decode(newly_generated_ids,
                                      skip_special_tokens=True)
 
+    def __repr__(self) -> str:
+        """Returns a developer-friendly representation of the session state."""
+        return (f'<GenerationSession generated={self._generated_token_count}/'
+                f'{self.max_new_tokens}, done={self._done}, '
+                f'prompt_len={self.prompt_length}>')
+
     def _should_stop(self) -> bool:
         """Check if generation should stop based on stop sequences or limits."""
         if self._generated_token_count >= self.max_new_tokens:

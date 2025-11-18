@@ -8,6 +8,7 @@ import torch
 from gymnasium import Env, spaces
 
 from backtracking_llm.generation import GenerationSession
+from backtracking_llm.rl import features
 from backtracking_llm.rl.config import EnvConfig
 from backtracking_llm.rl.rewards import RewardShaper
 from backtracking_llm.rl.judges import Judge
@@ -125,7 +126,12 @@ class BacktrackingEnv(Env):
         step_result = self.session.step()
         self._last_step_result = step_result
 
-        observation = self._build_observation(step_result)
+        history_tokens = self.session.token_ids[0, -5:].tolist()
+        observation = features.compute_observation(
+            probabilities=step_result.probabilities,
+            step_count=self.session.generated_token_count,
+            max_seq_length=self.config.max_seq_length,
+            history=history_tokens)
         reward = self.shaper.calculate(action, observation)
 
         terminated = self.session.done
@@ -148,81 +154,6 @@ class BacktrackingEnv(Env):
         reward += final_score
 
         return observation, reward, terminated, truncated, {}
-
-    def _build_observation(self, step_result) -> np.ndarray:
-        """Compute feature vector from generation state.
-
-        Features:
-        - normalized_position: How far through max sequence we are
-        - top1_probability: Confidence in current token
-        - entropy: Uncertainty of current distribution
-        - repetition_penalty: 0 if last token is unique, increases with repeats
-        """
-        if self.session is None:
-            return np.zeros(4, dtype=np.float32)
-
-        seq_len = self.session.token_ids.shape[1]
-        prompt_len = self.session.prompt_length
-        max_len = prompt_len + self.config.max_seq_length
-        normalized_pos = (seq_len - prompt_len) / max_len
-
-        if step_result:
-            probs = step_result.probabilities
-            if probs.ndim == 0:
-                probs = probs.unsqueeze(0)
-
-            top1_prob = probs[0].item() if len(probs) > 0 else 0.0
-
-            non_zero = probs[probs > 0]
-            if len(non_zero) > 0:
-                entropy = -(non_zero * non_zero.log()).sum().item()
-                entropy = entropy / np.log(len(probs))
-            else:
-                entropy = 0.0
-        else:
-            top1_prob = 0.0
-            entropy = 0.0
-
-        repetition_penalty = self._compute_repetition_penalty()
-
-        observation = np.array([
-            min(normalized_pos, 1.0),
-            min(top1_prob, 1.0),
-            min(entropy, 1.0),
-            min(repetition_penalty, 1.0),
-        ],
-                               dtype=np.float32)
-
-        return observation
-
-    def _compute_repetition_penalty(self) -> float:
-        """Computes a repetition penalty based on the uniqueness of recent
-        tokens.
-
-        The repetition penalty is calculated by comparing the number of unique
-        tokens in the most recent 5 generated tokens against the total number of
-        recent tokens. A higher penalty indicates more repetition in the recent
-        output.
-
-        Returns:
-            The repetition penalty value between 0.0 (no repetition) and 1.0
-                (complete repetition). Returns 0.0 if there's no session or if
-                there aren't enough tokens to compute the penalty.
-        """
-        if self.session is None or self.session.generated_token_count < 2:
-            return 0.0
-
-        token_ids = self.session.token_ids[0].cpu().numpy()
-        prompt_len = self.session.prompt_length
-
-        if len(token_ids) <= prompt_len + 1:
-            return 0.0
-
-        recent = token_ids[-5:]
-        unique = len(set(recent))
-        repetition_penalty = 1.0 - (unique / len(recent))
-
-        return repetition_penalty
 
     def render(self) -> Optional[str]:
         """Return current generated text for monitoring."""

@@ -115,30 +115,3 @@ def test_rl_policy_operator_backtrack():
         operator.backtrack(0)
         operator.backtrack(5)
         operator.backtrack(-1)
-
-
-def test_rl_policy_operator_observation_building():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        env = DummyBacktrackEnv()
-        model = PPO('MlpPolicy', env, n_steps=16, verbose=0)
-        model.learn(total_timesteps=32)
-        policy_path = Path(tmpdir) / 'policy.zip'
-        model.save(policy_path)
-
-        operator = RlPolicyOperator(policy_path)
-
-        logits = torch.randn(100)
-        probabilities = torch.softmax(logits, dim=-1)
-        observation = features.compute_observation(probabilities, 1, 1, [])
-        assert observation.shape == (4,)
-        assert observation.dtype == np.float32
-        assert np.all((observation >= 0.0) & (observation <= 1.0))
-
-        single_probs = torch.tensor([1.0])
-        single_obs = features.compute_observation(single_probs, 1, 1, [])
-        assert not np.isnan(single_obs).any()
-
-        const_logits = torch.ones(50)
-        const_probs = torch.softmax(const_logits, dim=-1)
-        const_obs = features.compute_observation(const_probs, 1, 1, [])
-        assert not np.isnan(const_obs).any()

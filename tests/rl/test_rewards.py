@@ -26,7 +26,7 @@ def dummy_observation() -> np.ndarray:
 def test_reward_shaper_no_reward_for_neutral_step(
         default_config: ShapingConfig, dummy_observation: np.ndarray):
     shaper = RewardShaper(default_config)
-    reward = shaper.calculate(action=0, observation=dummy_observation)
+    reward = shaper(action=0, observation=dummy_observation)
     assert reward == 0.0
 
 
@@ -35,7 +35,7 @@ def test_reward_shaper_penalty_for_single_token_backtrack(
     shaper = RewardShaper(default_config)
     expected_penalty = -(default_config.backtrack_action_penalty +
                          1 * default_config.backtrack_token_penalty)
-    reward = shaper.calculate(action=1, observation=dummy_observation)
+    reward = shaper(action=1, observation=dummy_observation)
     assert reward == pytest.approx(expected_penalty)
 
 
@@ -45,7 +45,7 @@ def test_reward_shaper_penalty_for_multiple_token_backtrack(
     action = 5
     expected_penalty = -(default_config.backtrack_action_penalty +
                          action * default_config.backtrack_token_penalty)
-    reward = shaper.calculate(action=action, observation=dummy_observation)
+    reward = shaper(action=action, observation=dummy_observation)
     assert reward == pytest.approx(expected_penalty)
 
 
@@ -56,14 +56,14 @@ def test_reward_shaper_uses_custom_config_values(dummy_observation: np.ndarray):
     action = 3
     expected_penalty = -(custom_config.backtrack_action_penalty +
                          action * custom_config.backtrack_token_penalty)
-    reward = shaper.calculate(action=action, observation=dummy_observation)
+    reward = shaper(action=action, observation=dummy_observation)
     assert reward == pytest.approx(expected_penalty)
 
 
 def test_reward_shaper_ignores_negative_action(default_config: ShapingConfig,
                                                dummy_observation: np.ndarray):
     shaper = RewardShaper(default_config)
-    reward = shaper.calculate(action=-1, observation=dummy_observation)
+    reward = shaper(action=-1, observation=dummy_observation)
     assert reward == 0.0
 
 
@@ -72,7 +72,7 @@ def test_reward_shaper_applies_repetition_penalty(
     shaper = RewardShaper(default_config)
     observation = np.array([0.5, 0.5, 0.5, 0.8], dtype=np.float32)
     expected_penalty = -0.8 * default_config.repetition_penalty_weight
-    reward = shaper.calculate(action=0, observation=observation)
+    reward = shaper(action=0, observation=observation)
     assert reward == pytest.approx(expected_penalty)
 
 
@@ -80,7 +80,7 @@ def test_reward_shaper_applies_high_confidence_reward(
         default_config: ShapingConfig):
     shaper = RewardShaper(default_config)
     observation = np.array([0.5, 0.95, 0.5, 0.0], dtype=np.float32)
-    reward = shaper.calculate(action=0, observation=observation)
+    reward = shaper(action=0, observation=observation)
     assert reward == pytest.approx(default_config.high_confidence_reward)
 
 
@@ -93,5 +93,5 @@ def test_reward_shaper_combines_all_reward_components(
     repetition_penalty = -0.8 * default_config.repetition_penalty_weight
     confidence_reward = default_config.high_confidence_reward
     expected_reward = backtrack_penalty + repetition_penalty + confidence_reward
-    reward = shaper.calculate(action=2, observation=observation)
+    reward = shaper(action=2, observation=observation)
     assert reward == pytest.approx(expected_reward)

@@ -31,10 +31,10 @@ def test_initialization_loads_prompts(prompt_file: Path):
 
 def test_get_prompt_cycles_through_prompts(prompt_file: Path):
     provider = TextFilePromptProvider(prompt_file)
-    assert provider.get_prompt() == 'First prompt.'
-    assert provider.get_prompt() == 'Second prompt.'
-    assert provider.get_prompt() == 'Third prompt.'
-    assert provider.get_prompt() == 'First prompt.'
+    assert next(provider) == 'First prompt.'
+    assert next(provider) == 'Second prompt.'
+    assert next(provider) == 'Third prompt.'
+    assert next(provider) == 'First prompt.'
 
 
 def test_shuffle_randomizes_prompt_order(prompt_file: Path):

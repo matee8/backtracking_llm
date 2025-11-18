@@ -60,7 +60,7 @@ def env_config():
 @pytest.fixture
 def mock_shaper():
     shaper = MagicMock(spec=RewardShaper)
-    shaper.calculate.return_value = 0.1
+    shaper.return_value = 0.1
     return shaper
 
 
@@ -138,8 +138,8 @@ def test_env_step_calls_shaper(mock_session_factory, mock_judge, mock_shaper,
                           env_config)
     env.reset()
     env.step(1)
-    mock_shaper.calculate.assert_called_once()
-    args, _ = mock_shaper.calculate.call_args
+    mock_shaper.assert_called_once()
+    args, _ = mock_shaper.call_args
     assert args[0] == 1
     assert isinstance(args[1], np.ndarray)
 

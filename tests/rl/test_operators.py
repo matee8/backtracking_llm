@@ -11,6 +11,7 @@ from gymnasium.spaces import Box, Discrete
 from stable_baselines3 import PPO
 from stable_baselines3.common import env_checker
 
+from backtracking_llm.rl import features
 from backtracking_llm.rl.operators import RlPolicyOperator
 
 # pylint: disable=missing-class-docstring
@@ -128,16 +129,16 @@ def test_rl_policy_operator_observation_building():
 
         logits = torch.randn(100)
         probabilities = torch.softmax(logits, dim=-1)
-        observation = operator._build_observation(probabilities)
+        observation = features.compute_observation(probabilities, 1, 1, [])
         assert observation.shape == (4,)
         assert observation.dtype == np.float32
         assert np.all((observation >= 0.0) & (observation <= 1.0))
 
         single_probs = torch.tensor([1.0])
-        single_obs = operator._build_observation(single_probs)
+        single_obs = features.compute_observation(single_probs, 1, 1, [])
         assert not np.isnan(single_obs).any()
 
         const_logits = torch.ones(50)
         const_probs = torch.softmax(const_logits, dim=-1)
-        const_obs = operator._build_observation(const_probs)
+        const_obs = features.compute_observation(const_probs, 1, 1, [])
         assert not np.isnan(const_obs).any()

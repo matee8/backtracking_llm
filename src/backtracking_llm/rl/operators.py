@@ -6,6 +6,7 @@ trained RL agents with the existing generation pipeline.
 """
 
 import logging
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -30,11 +31,12 @@ class RlPolicyOperator:
             in a single action (derived from policy action space).
     """
 
-    def __init__(self, policy_path: Path) -> None:
+    def __init__(self, policy_path: Path, max_seq_length: int = 512) -> None:
         """Initialize the RL policy operator.
 
         Args:
             policy_path: Path to the saved Stable Baselines 3 policy model.
+            max_seq_length: The maximum sequence length used during training.
 
         Raises:
             FileNotFoundError: If the policy file does not exist.
@@ -57,6 +59,10 @@ class RlPolicyOperator:
                              '`n` attribute.')
 
         self.action_space_size = action_space_size
+
+        self.max_seq_length = max_seq_length
+        self._step_count = 0
+        self._history: deque[str] = deque(maxlen=5)
 
     def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
@@ -81,7 +87,10 @@ class RlPolicyOperator:
         Raises:
             ValueError: If observation construction fails.
         """
-        observation = self._build_observation(logits, probabilities, position)
+        self._step_count += 1
+        self._history.append(token)
+
+        observation = self._build_observation(probabilities)
 
         action, _ = self.model.predict(observation, deterministic=True)
         backtrack_count = int(action)
@@ -91,30 +100,28 @@ class RlPolicyOperator:
     def backtrack(self, n_tokens: int) -> None:
         """Handle backtracking events.
 
-        This operator maintains no internal state, so backtracking doesn't
-        require any state updates. This method exists to satisfy the Operator
-        protocol.
+        Updates the internal step count and history buffer.
 
         Args:
             n_tokens: Number of tokens removed from the generation.
         """
-        pass
+        self._step_count = max(0, self._step_count - n_tokens)
+        for _ in range(min(n_tokens, len(self._history))):
+            self._history.pop()
 
-    def _build_observation(self, logits: Tensor, probabilities: Tensor,
-                           position: int) -> np.ndarray:
+    def _build_observation(self, probabilities: Tensor) -> np.ndarray:
         """Build observation vector from generation state.
 
         Constructs a 4-dimensional feature vector matching the observation
         space used during training in `BacktrackingEnv`:
-        1. chosen_token_confidence: Probability of the selected token
-        2. distribution_entropy: Entropy of the token probability distribution
-        3. position_ratio: Position of chosen token relative to vocabulary size
-        4. logit_magnitude: Standardized logit value of chosen token
+        1. normalized_position: How far through max sequence we are
+        2. top1_probability: Confidence in the highest probability token
+        3. entropy: Uncertainty of current distribution
+        4. repetition_penalty: 0 if recent tokens are unique, increases with
+           repeats
 
         Args:
-            logits: Raw logits tensor of shape (vocab_size,).
             probabilities: Probability tensor of shape (vocab_size,).
-            position: Index of the chosen token.
 
         Returns:
             Normalized feature vector of shape (4,) with dtype float32.
@@ -126,35 +133,30 @@ class RlPolicyOperator:
             raise ValueError(
                 'Cannot build observation from empty probabilities')
 
-        if position < 0 or position >= len(probabilities):
-            raise ValueError(
-                f'Position {position} out of bounds for probabilities of '
-                f'size {len(probabilities)}')
+        normalized_pos = min(self._step_count / self.max_seq_length, 1.0)
 
-        chosen_token_confidence = float(probabilities[position])
+        top1_prob = float(probabilities[0])
 
         non_zero_probs = probabilities[probabilities > 0]
         if len(non_zero_probs) > 0:
             entropy = -(non_zero_probs * non_zero_probs.log()).sum().item()
-
             max_entropy = np.log(len(probabilities))
             distribution_entropy = (entropy /
                                     max_entropy if max_entropy > 0 else 0.0)
         else:
             distribution_entropy = 0.0
 
-        position_ratio = float(position) / len(probabilities)
-
-        chosen_logit = float(logits[position])
-        logit_std = float(logits.std()) if logits.numel() > 1 else 1.0
-        logit_magnitude = chosen_logit / logit_std if logit_std > 0 else 0.0
+        repetition_penalty = 0.0
+        if len(self._history) > 0:
+            unique = len(set(self._history))
+            repetition_penalty = 1.0 - (unique / len(self._history))
 
         observation = np.array(
             [
-                min(chosen_token_confidence, 1.0),
-                min(max(distribution_entropy, 0.0), 1.0),
-                min(position_ratio, 1.0),
-                min(abs(logit_magnitude) / 10.0, 1.0),
+                min(normalized_pos, 1.0),
+                min(top1_prob, 1.0),
+                min(distribution_entropy, 1.0),
+                min(repetition_penalty, 1.0),
             ],
             dtype=np.float32,
         )

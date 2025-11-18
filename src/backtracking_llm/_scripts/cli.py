@@ -6,7 +6,7 @@ using the backtracking_llm library.
 import logging
 import sys
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from typing import Dict
+from typing import Callable, Dict
 
 from backtracking_llm.chat import ChatPipeline, ConversationHistory
 from backtracking_llm.decision import (EntropyThreshold, LogitThreshold,
@@ -18,15 +18,16 @@ from backtracking_llm._scripts.ui import Spinner
 
 # pylint: disable=broad-exception-caught
 
-OPERATOR_MAP: Dict[str, Operator] = {
-    'probability_threshold': ProbabilityThreshold(),
-    'entropy_threshold': EntropyThreshold(),
-    'probability_margin': ProbabilityMargin(),
-    'probability_drop': ProbabilityDrop(),
-    'probability_trend': ProbabilityTrend(),
-    'repetition': Repetition(),
-    'ngram_overlap': NGramOverlap(),
-    'logit_threshold': LogitThreshold(),
+
+OPERATOR_FACTORIES: Dict[str, Callable[[], Operator]] = { # type: ignore
+    'probability_threshold': lambda: ProbabilityThreshold(),
+    'entropy_threshold': lambda: EntropyThreshold(),
+    'probability_margin': lambda: ProbabilityMargin(),
+    'probability_drop': lambda: ProbabilityDrop(),
+    'probability_trend': lambda: ProbabilityTrend(),
+    'repetition': lambda: Repetition(),
+    'ngram_overlap': lambda: NGramOverlap(),
+    'logit_threshold': lambda: LogitThreshold(),
 }
 
 
@@ -55,7 +56,7 @@ def main() -> None:
         '--operator',
         type=str,
         default='none',
-        choices=OPERATOR_MAP.keys(),
+        choices=OPERATOR_FACTORIES.keys(),
         help='the backtracking operator to use during generation')
     parser.add_argument(
         '--max-new-tokens',
@@ -95,8 +96,11 @@ def main() -> None:
 
     chat_pipeline = ChatPipeline(generator)
     history: ConversationHistory = []
+    operator_factory = OPERATOR_FACTORIES.get(args.operator)
+    operator = operator_factory() if operator_factory else None
+
     generation_kwargs = {
-        'operator': OPERATOR_MAP.get(args.operator),
+        'operator': operator,
         'max_new_tokens': args.max_new_tokens,
         'temperature': args.temperature,
         'top_k': args.top_k,

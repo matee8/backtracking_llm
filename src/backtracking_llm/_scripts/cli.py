@@ -6,7 +6,7 @@ using the backtracking_llm library.
 import logging
 import sys
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from typing import Callable, Dict
+from typing import Dict, Type
 
 from backtracking_llm.chat import ChatPipeline, ConversationHistory
 from backtracking_llm.decision import (EntropyThreshold, LogitThreshold,
@@ -18,16 +18,15 @@ from backtracking_llm._scripts.ui import Spinner
 
 # pylint: disable=broad-exception-caught
 
-
-OPERATOR_FACTORIES: Dict[str, Callable[[], Operator]] = { # type: ignore
-    'probability_threshold': lambda: ProbabilityThreshold(),
-    'entropy_threshold': lambda: EntropyThreshold(),
-    'probability_margin': lambda: ProbabilityMargin(),
-    'probability_drop': lambda: ProbabilityDrop(),
-    'probability_trend': lambda: ProbabilityTrend(),
-    'repetition': lambda: Repetition(),
-    'ngram_overlap': lambda: NGramOverlap(),
-    'logit_threshold': lambda: LogitThreshold(),
+OPERATOR_FACTORIES: Dict[str, Type[Operator]] = {
+    'probability_threshold': ProbabilityThreshold,
+    'entropy_threshold': EntropyThreshold,
+    'probability_margin': ProbabilityMargin,
+    'probability_drop': ProbabilityDrop,
+    'probability_trend': ProbabilityTrend,
+    'repetition': Repetition,
+    'ngram_overlap': NGramOverlap,
+    'logit_threshold': LogitThreshold,
 }
 
 

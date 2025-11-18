@@ -38,7 +38,7 @@ class Operator(Protocol):
         """
         ...
 
-    def backtrack(self, n_token: int) -> None:
+    def backtrack(self, n_tokens: int) -> None:
         """Called when tokens are removed from the generation.
 
         Operators with internal state should revert their state as if

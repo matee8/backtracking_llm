@@ -133,7 +133,6 @@ def test_rl_policy_operator_observation_building():
         assert observation.dtype == np.float32
         assert np.all((observation >= 0.0) & (observation <= 1.0))
 
-        single_logits = torch.tensor([0.5])
         single_probs = torch.tensor([1.0])
         single_obs = operator._build_observation(single_probs)
         assert not np.isnan(single_obs).any()

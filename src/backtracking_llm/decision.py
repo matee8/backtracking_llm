@@ -9,7 +9,7 @@ model's output at a given step and return an integer value.
 
 import logging
 from collections import deque
-from typing import Optional, Protocol, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable, Set, Tuple
 
 import torch
 from torch import Tensor
@@ -568,7 +568,8 @@ class NGramOverlap:
         self.ngram_size = ngram_size
         self.backtrack_count = backtrack_count
         self._window: deque[str] = deque(maxlen=self.ngram_size)
-        self._seen_ngrams: set[tuple[str, ...]] = set()
+        self._seen_ngrams: Set[Tuple[str, ...]] = set()
+        self._history_log: deque[Optional[Tuple[str, ...]]] = deque()
 
     def __call__(self, logits: Tensor, probabilities: Tensor, position: int,
                  token: str) -> int:
@@ -579,29 +580,31 @@ class NGramOverlap:
         self._window.append(token)
 
         if len(self._window) < self.ngram_size:
+            self._history_log.append(None)
             return 0
 
         current_ngram = tuple(self._window)
 
         if current_ngram in self._seen_ngrams:
+            self._history_log.append(None)
             return self.backtrack_count
         else:
+            self._history_log.append(current_ngram)
             self._seen_ngrams.add(current_ngram)
             return 0
 
     def backtrack(self, n_tokens: int) -> None:
-        """Remove tokens from window and ngrams."""
+        """Remove tokens from window and revert seen_ngrams state."""
         for _ in range(min(n_tokens, len(self._window))):
             if self._window:
                 self._window.pop()
 
             self._seen_ngrams.clear()
-            if len(self._window) == self.ngram_size:
-                window_list = list(self._window)
-                for i in range(len(window_list), self.ngram_size - 1, -1):
-                    ngram = tuple(window_list[max(0, i - self.ngram_size):i])
-                    if len(ngram) == self.ngram_size:
-                        self._seen_ngrams.add(ngram)
+        for _ in range(min(n_tokens, len(self._history_log))):
+            if self._history_log:
+                ngram_to_remove = self._history_log.pop()
+                if ngram_to_remove is not None:
+                    self._seen_ngrams.discard(ngram_to_remove)
 
     def __repr__(self) -> str:
         """Returns an executable representation of the operator."""

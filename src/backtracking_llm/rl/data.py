@@ -2,16 +2,18 @@
 
 import random
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Iterator, Protocol, runtime_checkable
 
 
 @runtime_checkable
 class PromptProvider(Protocol):
     """A protocol for classes that provide prompts for training episodes."""
 
-    def get_prompt(self) -> str:
-        """Returns a single prompt string for the start of an episode.
+    def __iter__(self) -> Iterator[str]:
+        ...
 
+    def __next__(self) -> str:
+        """Returns the next prompt string for the start of an episode.
         Implementations should handle their own internal state, such as
         cycling through a dataset.
 
@@ -60,7 +62,11 @@ class TextFilePromptProvider:
 
         self._current_index = 0
 
-    def get_prompt(self) -> str:
+    def __iter__(self) -> 'TextFilePromptProvider':
+        """Returns self as the iterator."""
+        return self
+
+    def __next__(self) -> str:
         """Returns the next prompt, cycling through the list if necessary.
 
         Returns:

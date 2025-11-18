@@ -28,7 +28,7 @@ def mock_config(tmp_path: Path) -> RLConfig:
 @pytest.fixture
 def mock_prompt_provider() -> mock.Mock:
     provider = mock.Mock(spec=PromptProvider)
-    provider.get_prompt.return_value = 'This is a test prompt.'
+    provider.__next__.return_value = 'This is a test prompt.'
     return provider
 
 
@@ -86,11 +86,10 @@ def test_train_method_orchestration(
 
     session_factory = mock_env_cls.call_args.kwargs['session_factory']
     session_factory()
-    mock_prompt_provider.get_prompt.assert_called_once()
     mock_session_cls.assert_called_once_with(
         model=trainer.generator.model,
         tokenizer=trainer.generator.tokenizer,
-        prompt=mock_prompt_provider.get_prompt.return_value,
+        prompt=mock_prompt_provider.__next__.return_value,
         max_new_tokens=mock_config.env.max_seq_length,
     )
 

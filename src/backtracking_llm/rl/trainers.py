@@ -51,7 +51,7 @@ class RLTrainer:
 
         def session_factory() -> GenerationSession:
             """Creates a new GenerationSession for each episode."""
-            prompt = prompt_provider.get_prompt()
+            prompt = next(prompt_provider)
             return GenerationSession(
                 model=self.generator.model,
                 tokenizer=self.generator.tokenizer,

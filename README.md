@@ -48,6 +48,14 @@ This is managed by two primary components:
     -   Includes hyperparameter optimization with `optuna` to find the best
         `Operator` settings.
 
+-   Reinforcement Learning (RL) Training: Train custom backtracking policies
+    using PPO.
+
+    -   Uses `stable-baselines3` to train an agent that observes generation
+        statistics (entropy, confidence, repetition).
+    -   Supports "LLM-as-a-Judge" rewards (e.g., GPT-4 scoring) and intermediate
+        reward shaping.
+
 -   Interactive CLI: A user-friendly command-line interface (`backtracking-llm`)
     for interactively chatting with any Hugging Face model, with full support
     for configuring backtracking.
@@ -73,6 +81,14 @@ includes `lm-evaluation-harness`, `optuna`, and other necessary dependencies.
 
 ```bash
 pip install "backtracking-llm[benchmark]"
+```
+
+### For RL Training
+
+To train custom RL policies, install the `[rl]` extra.
+
+```bash
+pip install "backtracking-llm[rl]"
 ```
 
 ## Quickstart
@@ -175,9 +191,79 @@ The runner will execute the pipeline as defined: run the baseline, then run the
 20-trial hyperparameter search. All results will be saved as JSON files in the
 `benchmark_results/gsm8k_qwen` directory.
 
-For an example of how to configure and run the pipeline programmatically in a
-Python script, see the `basic_benchmarking.py` file in the `examples/`
-directory.
+## Reinforcement Learning (RL) Training
+
+You can train a custom neural network policy to control backtracking, rather
+than relying on fixed heuristics. The library provides a complete training
+pipeline using Proximal Policy Optimization (PPO).
+
+**1. Prepare Data**
+
+Create a text file (`prompts.txt`) with one training prompt per line.
+
+**2. Create Configuration**
+
+Create a `rl_config.yaml` file:
+
+```yaml
+model_name_or_path: "Qwen/Qwen2.5-0.5B-Instruct"
+output_dir: "rl_output"
+device: "cuda"
+
+judge:
+  model: "gpt-4-turbo-preview"
+  api_key: "sk-..."  # Or set OPENAI_API_KEY env var
+
+env:
+  max_backtrack: 5
+  max_seq_length: 128
+
+training:
+  total_timesteps: 10000
+  learning_rate: 0.0003
+
+shaping:
+  backtrack_action_penalty: 0.05
+  repetition_penalty_weight: 0.1
+```
+
+**3. Run Training**
+
+```bash
+backtracking-llm-train-rl --config rl_config.yaml --prompts prompts.txt
+```
+
+This will save a `policy.zip` file in your output directory.
+
+**4. Use the Trained Policy**
+
+You can load the trained policy using the `RlPolicyOperator`:
+
+```python
+from pathlib import Path
+from backtracking_llm.generation import Generator
+from backtracking_llm.rl.operators import RlPolicyOperator
+
+generator = Generator.from_pretrained('Qwen/Qwen2.5-0.5B-Instruct')
+
+rl_operator = RlPolicyOperator(policy_path=Path('rl_output/policy.zip'))
+
+completion = generator.generate(
+    'Once upon a time',
+    operator=rl_operator,
+    max_new_tokens=100
+)
+```
+
+## Examples
+
+Check the `examples/` directory for runnable scripts:
+
+-   `basic_generation.py`: How to generate with backtracking enabled.
+-   `interactive_chat.py`: How to have an interactive conversation with
+    backtracking enabled.
+-   `basic_benchmarking.py`: Programmatic benchmarking workflow.
+-   `rl_training.py`: How to launch RL training from Python code.
 
 ## Available Backtracking Operators
 
@@ -194,6 +280,7 @@ via the `--operator` flag.
 | `Repetition`              | Backtracks on excessive consecutive token repetitions.                       |
 | `NGramOverlap`            | Backtracks when a sequence of N tokens is repeated.                          |
 | `LogitThreshold`          | Backtracks if a chosen token's raw logit value is below a threshold.         |
+| `RlPolicyOperator`        | Uses a trained Stable Baselines 3 policy to decide.                          |
 
 ## Contributing
 

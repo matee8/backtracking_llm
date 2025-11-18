@@ -168,6 +168,9 @@ class BacktrackingEnv(Env):
 
         if step_result:
             probs = step_result.probabilities
+            if probs.ndim == 0:
+                probs = probs.unsqueeze(0)
+
             top1_prob = probs[0].item() if len(probs) > 0 else 0.0
 
             non_zero = probs[probs > 0]

@@ -11,7 +11,6 @@ from gymnasium.spaces import Box, Discrete
 from stable_baselines3 import PPO
 from stable_baselines3.common import env_checker
 
-from backtracking_llm.rl import features
 from backtracking_llm.rl.operators import RlPolicyOperator
 
 # pylint: disable=missing-class-docstring

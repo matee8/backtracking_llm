@@ -2,7 +2,7 @@
 
 import dataclasses
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 # pylint: disable=not-a-mapping
 
@@ -155,6 +155,8 @@ class RLConfig:
 
     Attributes:
         model_name_or_path: Hugging Face model identifier.
+        model_kwargs: A dictionary of keyword arguments to pass directly to the
+            Hugging Face `from_pretrained` method.
         judge: Judge configuration.
         env: Environment configuration.
         training: Training configuration.
@@ -163,6 +165,7 @@ class RLConfig:
     """
 
     model_name_or_path: str
+    model_kwargs: Dict[str, Any] = dataclasses.field(default_factory=dict)
     judge: JudgeConfig = dataclasses.field(default_factory=JudgeConfig)
     env: EnvConfig = dataclasses.field(default_factory=EnvConfig)
     training: TrainingConfig = dataclasses.field(default_factory=TrainingConfig)

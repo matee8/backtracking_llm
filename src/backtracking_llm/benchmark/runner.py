@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict
 from pathlib import Path
 
+from backtracking_llm.benchmark import resolution
 from backtracking_llm.benchmark.config import BenchmarkingConfig
 from backtracking_llm.benchmark.evaluator import Evaluator
 from backtracking_llm.benchmark.hpo import HyperparameterOptimizer
@@ -57,13 +58,11 @@ class BenchmarkRunner:
         if self.config.run_baseline:
             self._run_baseline()
 
-        if self.config.hpo and self.config.operator_to_tune:
-            self._run_hpo()
-        elif self.config.operator_to_tune:
-            logger.warning(
-                "An operator '%s' was specified to tune, but no HPO "
-                'configuration was provided. Skipping HPO.',
-                self.config.operator_to_tune)
+        if self.config.operator_to_tune:
+            if self.config.hpo:
+                self._run_hpo()
+            else:
+                self._run_single_eval()
 
         logger.info('--- Benchmarking pipeline finished. ---')
 
@@ -120,3 +119,21 @@ class BenchmarkRunner:
             'operator': self.config.operator_to_tune,
         }
         _save_results_json(best_results, output_dir / 'hpo_results.json')
+
+    def _run_single_eval(self) -> None:
+        """Runs a single evaluation with a specific operator configuration."""
+        op_name = self.config.operator_to_tune
+        if not op_name:
+            return
+
+        logger.info('Step: Running Single Evaluation for Operator: %s', op_name)
+
+        operator_cls = resolution.resolve_operator_class(op_name)
+        operator = operator_cls(**self.config.operator_params)
+
+        evaluator = Evaluator(self.config.evaluation)
+        results = evaluator.run(self.generator, self.config.generation,
+                                operator)
+
+        output_dir = Path(self.config.evaluation.output_dir)
+        _save_results_json(results, output_dir / f'{op_name}_eval.json')

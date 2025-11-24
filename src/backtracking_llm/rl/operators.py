@@ -43,6 +43,9 @@ class RlPolicyOperator:
             FileNotFoundError: If the policy file does not exist.
             ValueError: If the policy has invalid action space.
         """
+        if isinstance(policy_path, str):
+            policy_path = Path(policy_path)
+
         if not policy_path.exists():
             raise FileNotFoundError(f'Policy file not found at {policy_path}')
 

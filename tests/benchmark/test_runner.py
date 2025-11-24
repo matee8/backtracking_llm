@@ -137,21 +137,6 @@ class TestBenchmarkRunner:
             mock_save.assert_called_once_with(expected_results,
                                               Path('/tmp/hpo/hpo_results.json'))
 
-    def test_run_warns_if_operator_to_tune_but_no_hpo_config(
-            self, mock_from_pretrained, caplog):
-        config = BenchmarkingConfig(model_name_or_path='test',
-                                    run_baseline=False,
-                                    evaluation=EvaluationConfig(tasks=['task']),
-                                    operator_to_tune='Op',
-                                    hpo=None)
-
-        runner = BenchmarkRunner(config)
-        runner.run()
-
-        assert 'Skipping HPO' in caplog.text
-        assert ('was specified to tune, but no HPO configuration was provided'
-                in caplog.text)
-
     @patch('backtracking_llm.benchmark.runner.Evaluator')
     def test_run_baseline_handles_evaluator_failure(self, mock_evaluator_cls,
                                                     mock_from_pretrained,

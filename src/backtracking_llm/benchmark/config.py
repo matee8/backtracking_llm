@@ -63,9 +63,11 @@ class BenchmarkingConfig:
     Attributes:
         model_name_or_path: The name or path of the Hugging Face model to use.
         device: The device to run the model on (e.g., 'cpu', 'cuda:0').
-        operator_to_tune: The name of the decision Operator class to optimize.
-            If None, only a baseline evaluation is run (if `run_baseline` is
-            True).
+        operator_to_tune: The name of the decision Operator class to evaluate
+            or optimize. If None, only a baseline evaluation is run (if
+            `run_baseline` is True).
+        operator_params: A dictionary of fixed keyword arguments to pass to the
+            operator's constructor. Useful for single-run evaluations.
         model_kwargs: A dictionary of keyword arguments to pass directly to the
             Hugging Face `from_pretrained` method.
         run_baseline: Whether to run a baseline evaluation without backtracking.
@@ -75,9 +77,10 @@ class BenchmarkingConfig:
             None, no HPO will be performed.
     """
     model_name_or_path: str
-    model_kwargs: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    model_kwargs: Dict[str, Any] = dataclasses.field(default_factory=Dict)
     device: str = 'cpu'
     operator_to_tune: Optional[str] = None
+    operator_params: Dict[str, Any] = dataclasses.field(default_factory=Dict)
     run_baseline: bool = True
     generation: GenerationConfig = dataclasses.field(
         default_factory=GenerationConfig)

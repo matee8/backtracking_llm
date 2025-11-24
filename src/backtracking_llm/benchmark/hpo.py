@@ -1,13 +1,12 @@
 """Provides a class for running hyperparameter optimization using Optuna."""
 
 import logging
-from typing import Any, Dict, Type
+from typing import Any, Dict
 
 import optuna
 from optuna.study import Study
 from optuna.trial import Trial
 
-from backtracking_llm import decision
 from backtracking_llm.benchmark import resolution
 from backtracking_llm.benchmark.config import (EvaluationConfig,
                                                GenerationConfig, HPOConfig)

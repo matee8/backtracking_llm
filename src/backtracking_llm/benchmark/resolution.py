@@ -32,8 +32,9 @@ def resolve_operator_class(name: str) -> Type[Operator]:
                 cls = getattr(operators, name)
             else:
                 raise AttributeError
-        except (ImportError, AttributeError):
-            raise ValueError(f"'{name}' is not a valid Operator class name.")
+        except (ImportError, AttributeError) as e:
+            raise ValueError(
+                f"'{name}' is not a valid Operator class name.") from e
 
     if not issubclass(cls, Operator):
         raise ValueError(f"'{name}' is not a valid Operator class name.")

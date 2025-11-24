@@ -130,11 +130,3 @@ class TestHyperparameterOptimizer:
                 TypeError,
                 match="Unsupported type for hyperparameter 'bad_param'"):
             optimizer._sample_params(mock_trial)
-
-    def test_get_operator_class_raises_error_for_non_class_attribute(
-            self, mock_evaluator_cls, mock_create_study):
-        with patch('backtracking_llm.decision.logger', 'not a class'):
-            with pytest.raises(
-                    ValueError,
-                    match="'logger' is not a valid Operator class name"):
-                HyperparameterOptimizer._get_operator_class('logger')

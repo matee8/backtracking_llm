@@ -8,6 +8,7 @@ from optuna.study import Study
 from optuna.trial import Trial
 
 from backtracking_llm import decision
+from backtracking_llm.benchmark import resolution
 from backtracking_llm.benchmark.config import (EvaluationConfig,
                                                GenerationConfig, HPOConfig)
 from backtracking_llm.benchmark.evaluator import Evaluator
@@ -38,7 +39,7 @@ class HyperparameterOptimizer:
         self._eval_config = eval_config
         self._gen_config = gen_config
         self._generator = generator
-        self._operator_cls = self._get_operator_class(operator_name)
+        self._operator_cls = resolution.resolve_operator_class(operator_name)
         self._evaluator = Evaluator(self._eval_config)
 
     def optimize(self) -> Study:
@@ -102,16 +103,3 @@ class HyperparameterOptimizer:
                     'Only int and float ranges are supported.')
 
         return params
-
-    @staticmethod
-    def _get_operator_class(name: str) -> Type[decision.Operator]:
-        """Retrieves an Operator class from the decision module by its name."""
-        if not hasattr(decision, name):
-            raise ValueError(f"'{name}' is not a valid Operator class name.")
-
-        operator_cls = getattr(decision, name)
-        if not isinstance(operator_cls, type) or not issubclass(
-                operator_cls, decision.Operator):
-            raise ValueError(f"'{name}' is not a valid Operator class name.")
-
-        return operator_cls

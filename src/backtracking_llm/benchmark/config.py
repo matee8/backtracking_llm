@@ -77,10 +77,10 @@ class BenchmarkingConfig:
             None, no HPO will be performed.
     """
     model_name_or_path: str
-    model_kwargs: Dict[str, Any] = dataclasses.field(default_factory=Dict)
+    model_kwargs: Dict[str, Any] = dataclasses.field(default_factory=dict)
     device: str = 'cpu'
     operator_to_tune: Optional[str] = None
-    operator_params: Dict[str, Any] = dataclasses.field(default_factory=Dict)
+    operator_params: Dict[str, Any] = dataclasses.field(default_factory=dict)
     run_baseline: bool = True
     generation: GenerationConfig = dataclasses.field(
         default_factory=GenerationConfig)

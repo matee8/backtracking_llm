@@ -8,6 +8,19 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-12-01
+
+### Added
+
+-   Added "Single Evaluation" mode to the benchmarking pipeline.
+-   Added `model_kwargs` to `RLConfig`.
+-   Updated benchmark operator resolution to support classes from `backtracking_llm.rl.operators`.
+
+### Fixed
+
+-   Fixed `RlPolicyOperator` initialization to correctly accept file paths as
+    strings (previously required `pathlib.Path` objects).
+
 ## [0.3.0] - 2025-11-19
 
 ### Added
@@ -75,9 +88,10 @@ and this project adheres to
 - Stateless `ChatPipeline` for easy, multi-turn conversational interactions.
 - Interactive `backtracking-llm` CLI for local-first chatting.
 
-[Unreleased]: https://github.com/matee8/backtracking_llm/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/matee8/backtracking_llm/compare/v0.3.1...HEAD
 [0.1.0]: https://github.com/matee8/backtracking_llm/releases/tag/v0.1.0
 [0.2.0]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.0
 [0.2.1]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.1
 [0.2.2]: https://github.com/matee8/backtracking_llm/releases/tag/v0.2.2
 [0.3.0]: https://github.com/matee8/backtracking_llm/releases/tag/v0.3.0
+[0.3.1]: https://github.com/matee8/backtracking_llm/releases/tag/v0.3.1
